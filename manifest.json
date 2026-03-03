@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Jira Plans Enhanced",
+  "version": "0.1.0",
+  "description": "Enhance Jira Plans with powerful features: headcount tracking, resource visibility, and more",
+  "host_permissions": ["*://*.atlassian.net/*", "*://*/jira/*"],
+  "permissions": ["storage", "tabs"],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.atlassian.net/jira/software/c/*/plans*",
+        "*://*/secure/*"
+      ],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Jira Plans Enhanced"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
