@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="popup-header">
       <h1>Jira Plans Enhanced</h1>
-      <div class="version">v0.1.0</div>
+      <div class="version">v0.3.0</div>
     </header>
 
     <!-- Quick Toggles Section -->
@@ -38,6 +38,32 @@
           <span class="toggle-slider"></span>
           <span class="toggle-label">Show Zero Count Badges</span>
         </label>
+      </div>
+    </section>
+
+    <!-- Custom Domain Allowlist Section -->
+    <section class="section" id="domainSection">
+      <h2>Auto-Injection</h2>
+      <div class="domain-info">
+        <div class="current-domain">
+          <span class="domain-label">Current domain:</span>
+          <span class="domain-value" id="currentDomain">-</span>
+        </div>
+        <div class="domain-status" id="domainStatus">
+          <span class="status-badge" id="domainStatusBadge">Not allowlisted</span>
+        </div>
+        <p class="domain-help" id="domainHelp" style="display:none;">
+          Add this domain to enable automatic badge injection on future visits.
+        </p>
+        <button id="toggleDomainAllowlist" class="btn btn-primary" style="display:none;">
+          Enable auto-injection on this domain
+        </button>
+      </div>
+      <div class="allowlist-section" id="allowlistSection" style="display:none;">
+        <h3>Allowlisted Domains</h3>
+        <div class="allowlist-container" id="allowlistContainer">
+          <p class="no-domains">No custom domains added yet</p>
+        </div>
       </div>
     </section>
 

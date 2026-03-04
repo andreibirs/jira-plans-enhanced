@@ -39,12 +39,16 @@ import {
 
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS;
 let statisticsInterval: NodeJS.Timeout | null = null;
+let currentTabDomain: string | null = null;
+let currentTabUrl: string | null = null;
 
 /**
  * Initialize popup when DOM is ready
  */
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
+  await loadCurrentDomain();
+  await loadAllowlistedDomains();
   setupEventListeners();
   await refreshStatistics();
   startStatisticsPolling();
@@ -82,6 +86,267 @@ async function saveSettings(): Promise<void> {
   } catch (error) {
     console.error('Failed to save settings:', error);
     setStatus('Failed to save settings', 'disconnected');
+  }
+}
+
+/**
+ * Extract domain from URL
+ */
+function extractDomain(url: string): string | null {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if domain is a built-in supported domain (auto-injects)
+ */
+function isBuiltInDomain(domain: string): boolean {
+  return domain.endsWith('.atlassian.net') || domain.endsWith('.jira.com');
+}
+
+/**
+ * Create URL pattern for domain
+ */
+function createDomainPattern(domain: string): string {
+  return `*://${domain}/*`;
+}
+
+/**
+ * Load current tab domain and display in UI
+ */
+async function loadCurrentDomain(): Promise<void> {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = tabs[0];
+
+  if (!activeTab?.url) {
+    return;
+  }
+
+  currentTabUrl = activeTab.url;
+  currentTabDomain = extractDomain(activeTab.url);
+
+  if (!currentTabDomain) {
+    return;
+  }
+
+  // Update UI
+  const currentDomainEl = document.getElementById('currentDomain');
+  if (currentDomainEl) {
+    currentDomainEl.textContent = currentTabDomain;
+  }
+
+  // Check if this is a built-in domain
+  if (isBuiltInDomain(currentTabDomain)) {
+    const statusBadge = document.getElementById('domainStatusBadge');
+    if (statusBadge) {
+      statusBadge.textContent = 'Built-in (auto-injects)';
+      statusBadge.className = 'status-badge built-in';
+    }
+    // Hide the add button for built-in domains
+    const toggleButton = document.getElementById('toggleDomainAllowlist');
+    if (toggleButton) {
+      toggleButton.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Load allowlisted domains from background
+ */
+async function loadAllowlistedDomains(): Promise<void> {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_ALLOWLISTED_DOMAINS' });
+
+    if (response.success) {
+      const domains = response.domains || [];
+      updateAllowlistUI(domains);
+
+      // Check if current domain is in allowlist
+      if (currentTabDomain && !isBuiltInDomain(currentTabDomain)) {
+        const isAllowlisted = domains.some((d: any) => d.domain === currentTabDomain);
+        updateDomainStatus(isAllowlisted);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load allowlisted domains:', error);
+  }
+}
+
+/**
+ * Update domain status UI
+ */
+function updateDomainStatus(isAllowlisted: boolean): void {
+  const statusBadge = document.getElementById('domainStatusBadge');
+  const toggleButton = document.getElementById('toggleDomainAllowlist') as HTMLButtonElement;
+  const domainHelp = document.getElementById('domainHelp');
+
+  if (!statusBadge || !toggleButton) return;
+
+  if (isAllowlisted) {
+    statusBadge.textContent = 'Allowlisted (auto-injects)';
+    statusBadge.className = 'status-badge allowlisted';
+    toggleButton.textContent = 'Remove from auto-injection';
+    toggleButton.className = 'btn btn-secondary';
+    if (domainHelp) domainHelp.style.display = 'none';
+  } else {
+    statusBadge.textContent = 'Not allowlisted';
+    statusBadge.className = 'status-badge not-allowlisted';
+    toggleButton.textContent = 'Add to allowlist';
+    toggleButton.className = 'btn btn-primary';
+    if (domainHelp) domainHelp.style.display = 'block';
+  }
+
+  toggleButton.style.display = 'block';
+}
+
+/**
+ * Update allowlist UI with domains
+ */
+function updateAllowlistUI(domains: any[]): void {
+  const allowlistSection = document.getElementById('allowlistSection');
+  const allowlistContainer = document.getElementById('allowlistContainer');
+
+  if (!allowlistContainer || !allowlistSection) return;
+
+  if (domains.length === 0) {
+    allowlistContainer.innerHTML = '<p class="no-domains">No custom domains added yet</p>';
+    allowlistSection.style.display = 'none';
+  } else {
+    allowlistSection.style.display = 'block';
+    allowlistContainer.innerHTML = domains
+      .map(
+        (d: any) => `
+      <div class="allowlist-item">
+        <span class="domain-name">${d.domain}</span>
+        <button class="btn-remove" data-domain="${d.domain}">×</button>
+      </div>
+    `
+      )
+      .join('');
+
+    // Add remove handlers
+    const removeButtons = allowlistContainer.querySelectorAll('.btn-remove');
+    removeButtons.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const domain = (e.target as HTMLElement).getAttribute('data-domain');
+        if (domain) {
+          await removeDomainFromAllowlist(domain);
+        }
+      });
+    });
+  }
+}
+
+/**
+ * Toggle current domain in allowlist
+ */
+async function toggleCurrentDomainAllowlist(): Promise<void> {
+  if (!currentTabDomain) return;
+
+  // Check current status
+  const response = await chrome.runtime.sendMessage({ type: 'GET_ALLOWLISTED_DOMAINS' });
+  if (!response.success) return;
+
+  const domains = response.domains || [];
+  const isAllowlisted = domains.some((d: any) => d.domain === currentTabDomain);
+
+  if (isAllowlisted) {
+    await removeDomainFromAllowlist(currentTabDomain);
+  } else {
+    await addDomainToAllowlist(currentTabDomain);
+  }
+}
+
+/**
+ * Inject content script into current tab
+ */
+async function injectContentScriptNow(): Promise<boolean> {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0];
+
+    if (!activeTab?.id) {
+      return false;
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId: activeTab.id },
+      files: ['content/content-script.js'],
+    });
+
+    // Wait for content script to initialize
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return true;
+  } catch (error) {
+    console.error('Failed to inject content script:', error);
+    return false;
+  }
+}
+
+/**
+ * Add domain to allowlist
+ */
+async function addDomainToAllowlist(domain: string): Promise<void> {
+  const pattern = createDomainPattern(domain);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'ADD_DOMAIN_TO_ALLOWLIST',
+      domain,
+      pattern,
+    });
+
+    if (response.success) {
+      setStatus(`Added ${domain}, activating...`, 'loading');
+      await loadAllowlistedDomains();
+
+      // Icon should update automatically via storage.onChanged listener in background
+      // Give it a moment to update
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Inject content script immediately so user doesn't need to refresh
+      const injected = await injectContentScriptNow();
+
+      if (injected) {
+        setStatus('Connected to Jira Plans', 'connected');
+        // Refresh statistics to show badges are working
+        await refreshStatistics();
+      } else {
+        setStatus('Added. Please refresh the page.', 'loading');
+      }
+    } else {
+      setStatus(`Failed: ${response.error}`, 'disconnected');
+    }
+  } catch (error) {
+    console.error('Failed to add domain:', error);
+    setStatus('Failed to add domain', 'disconnected');
+  }
+}
+
+/**
+ * Remove domain from allowlist
+ */
+async function removeDomainFromAllowlist(domain: string): Promise<void> {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'REMOVE_DOMAIN_FROM_ALLOWLIST',
+      domain,
+    });
+
+    if (response.success) {
+      setStatus(`Removed ${domain} from auto-injection`, 'loading');
+      await loadAllowlistedDomains();
+      setTimeout(() => setStatus('Connected to Jira Plans', 'connected'), 1500);
+    } else {
+      setStatus(`Failed: ${response.error}`, 'disconnected');
+    }
+  } catch (error) {
+    console.error('Failed to remove domain:', error);
+    setStatus('Failed to remove domain', 'disconnected');
   }
 }
 
@@ -172,30 +437,15 @@ function setupEventListeners(): void {
     // TODO: Open advanced settings page
     alert('Advanced settings coming soon!');
   });
-}
 
-/**
- * Inject content script into current tab using chrome.scripting API
- * This allows the extension to work on ANY domain when user clicks the icon
- */
-async function injectContentScript(tabId: number): Promise<boolean> {
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content/content-script.js'],
-    });
-    // Wait a bit for content script to initialize
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return true;
-  } catch (error) {
-    console.error('Failed to inject content script:', error);
-    return false;
-  }
+  // Domain allowlist toggle
+  const toggleDomainAllowlist = document.getElementById('toggleDomainAllowlist');
+  toggleDomainAllowlist?.addEventListener('click', toggleCurrentDomainAllowlist);
 }
 
 /**
  * Send message to content script and get response
- * Automatically injects content script if not already loaded (for custom Jira domains)
+ * Content script must already be loaded (either via built-in domains or allowlisted domains)
  */
 async function sendMessageToContentScript(message: PopupRequest): Promise<PopupResponse> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -205,35 +455,18 @@ async function sendMessageToContentScript(message: PopupRequest): Promise<PopupR
     return { type: 'ERROR', success: false, error: 'No active tab found' };
   }
 
+  // Check if current tab is a special page (extensions, chrome://, etc.)
+  if (activeTab.url?.startsWith('chrome://') || activeTab.url?.startsWith('chrome-extension://')) {
+    return { type: 'ERROR', success: false, error: 'Content script not available on this page' };
+  }
+
   try {
-    // Try sending message first
     const response = await chrome.tabs.sendMessage(activeTab.id, message);
     return response as PopupResponse;
   } catch (error) {
-    const errorMessage = String(error);
-
-    // If "Receiving end does not exist", content script not loaded
-    // Inject it programmatically and retry
-    if (errorMessage.includes('Receiving end does not exist')) {
-      console.log('Content script not loaded, injecting...');
-      const injected = await injectContentScript(activeTab.id);
-
-      if (injected) {
-        // Retry message after injection
-        try {
-          const response = await chrome.tabs.sendMessage(activeTab.id, message);
-          return response as PopupResponse;
-        } catch (retryError) {
-          console.error('Failed to send message after injection:', retryError);
-          return { type: 'ERROR', success: false, error: String(retryError) };
-        }
-      } else {
-        return { type: 'ERROR', success: false, error: 'Failed to inject content script' };
-      }
-    }
-
-    console.error('Failed to send message to content script:', error);
-    return { type: 'ERROR', success: false, error: errorMessage };
+    // Content script not loaded - this is expected on non-Jira pages
+    // Don't log as error to avoid confusion
+    return { type: 'ERROR', success: false, error: 'Content script not loaded on this page' };
   }
 }
 
@@ -246,8 +479,46 @@ async function refreshStatistics(): Promise<void> {
   if (isSuccessResponse(response) && response.type === 'GET_STATISTICS_RESPONSE') {
     updateStatisticsUI(response.statistics);
   } else {
-    setStatus('Not connected to Jira Plans', 'disconnected');
+    // Content script not available - check if we're on a Jira page
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0];
+
+    if (activeTab?.url?.startsWith('chrome://') || activeTab?.url?.startsWith('chrome-extension://')) {
+      setStatus('Open a Jira Plans page to see statistics', 'disconnected');
+    } else if (currentTabDomain) {
+      const isSupported = await isDomainSupportedByTab();
+      if (isSupported) {
+        setStatus('Loading... Please wait', 'loading');
+      } else {
+        setStatus('Add this domain to use the extension', 'disconnected');
+      }
+    } else {
+      setStatus('Not connected to Jira Plans', 'disconnected');
+    }
   }
+}
+
+/**
+ * Check if current tab domain is supported
+ */
+async function isDomainSupportedByTab(): Promise<boolean> {
+  if (!currentTabDomain) return false;
+
+  // Check if built-in
+  if (isBuiltInDomain(currentTabDomain)) return true;
+
+  // Check if allowlisted
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_ALLOWLISTED_DOMAINS' });
+    if (response.success) {
+      const domains = response.domains || [];
+      return domains.some((d: any) => d.domain === currentTabDomain);
+    }
+  } catch (error) {
+    console.error('Failed to check domain support:', error);
+  }
+
+  return false;
 }
 
 /**
