@@ -20,7 +20,7 @@
         "*://*.jira.com/secure/*"
       ],
       "js": [
-        "src/content/content-script.js"
+        "content/content-script.js"
       ],
       "run_at": "document_end"
     }
