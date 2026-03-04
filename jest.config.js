@@ -14,6 +14,9 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
+    '!src/background/**',  // Service worker - browser integration, not unit testable
+    '!src/popup/**',        // Popup UI - browser integration, not unit testable
+    '!src/__tests__/**',    // Test setup files
   ],
   coverageThreshold: {
     global: {

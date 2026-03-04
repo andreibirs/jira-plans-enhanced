@@ -40,7 +40,6 @@ import {
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS;
 let statisticsInterval: NodeJS.Timeout | null = null;
 let currentTabDomain: string | null = null;
-let currentTabUrl: string | null = null;
 
 /**
  * Initialize popup when DOM is ready
@@ -126,7 +125,6 @@ async function loadCurrentDomain(): Promise<void> {
     return;
   }
 
-  currentTabUrl = activeTab.url;
   currentTabDomain = extractDomain(activeTab.url);
 
   if (!currentTabDomain) {

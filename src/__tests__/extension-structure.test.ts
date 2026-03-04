@@ -56,7 +56,7 @@ describe('Extension Structure', () => {
     });
 
     it('should point to compiled JS files', () => {
-      expect(manifest?.background).toBeUndefined();
+      expect(manifest?.background?.service_worker).toBe('background/service-worker.js');
       expect(manifest?.content_scripts?.[0]?.js?.[0]).toBe('content/content-script.js');
     });
 

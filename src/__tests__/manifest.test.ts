@@ -20,9 +20,10 @@ describe('manifest.json', () => {
     expect(manifest.description).toBeTruthy();
   });
 
-  it('should not require a background service worker for DOM-only approach', () => {
-    // Service worker removed since we only need content script for DOM parsing
-    expect(manifest.background).toBeUndefined();
+  it('should have background service worker for domain management', () => {
+    // Service worker manages dynamic content script registration and allowlist
+    expect(manifest.background).toBeDefined();
+    expect(manifest.background?.service_worker).toBe('background/service-worker.js');
   });
 
   it('should register content script for Jira Plans', () => {
@@ -45,11 +46,16 @@ describe('manifest.json', () => {
     }
   });
 
-  it('should have required permissions for caching and settings', () => {
-    // Storage permission needed for settings and cache
-    // Tabs permission needed for popup-content script communication
+  it('should have required permissions for universal domain support', () => {
+    // Storage: settings, cache, and allowlist
+    // Tabs: popup-content script communication
+    // ActiveTab: inject content script on user click
+    // Scripting: dynamic content script registration
     expect(manifest.permissions).toBeDefined();
-    expect(manifest.permissions).toEqual(['storage', 'tabs']);
+    expect(manifest.permissions).toEqual(
+      expect.arrayContaining(['storage', 'tabs', 'activeTab', 'scripting'])
+    );
+    expect(manifest.permissions?.length).toBe(4);
   });
 
   it('should have host_permissions for Jira instances', () => {
