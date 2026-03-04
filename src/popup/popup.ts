@@ -175,7 +175,27 @@ function setupEventListeners(): void {
 }
 
 /**
+ * Inject content script into current tab using chrome.scripting API
+ * This allows the extension to work on ANY domain when user clicks the icon
+ */
+async function injectContentScript(tabId: number): Promise<boolean> {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content/content-script.js'],
+    });
+    // Wait a bit for content script to initialize
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return true;
+  } catch (error) {
+    console.error('Failed to inject content script:', error);
+    return false;
+  }
+}
+
+/**
  * Send message to content script and get response
+ * Automatically injects content script if not already loaded (for custom Jira domains)
  */
 async function sendMessageToContentScript(message: PopupRequest): Promise<PopupResponse> {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -186,11 +206,34 @@ async function sendMessageToContentScript(message: PopupRequest): Promise<PopupR
   }
 
   try {
+    // Try sending message first
     const response = await chrome.tabs.sendMessage(activeTab.id, message);
     return response as PopupResponse;
   } catch (error) {
+    const errorMessage = String(error);
+
+    // If "Receiving end does not exist", content script not loaded
+    // Inject it programmatically and retry
+    if (errorMessage.includes('Receiving end does not exist')) {
+      console.log('Content script not loaded, injecting...');
+      const injected = await injectContentScript(activeTab.id);
+
+      if (injected) {
+        // Retry message after injection
+        try {
+          const response = await chrome.tabs.sendMessage(activeTab.id, message);
+          return response as PopupResponse;
+        } catch (retryError) {
+          console.error('Failed to send message after injection:', retryError);
+          return { type: 'ERROR', success: false, error: String(retryError) };
+        }
+      } else {
+        return { type: 'ERROR', success: false, error: 'Failed to inject content script' };
+      }
+    }
+
     console.error('Failed to send message to content script:', error);
-    return { type: 'ERROR', success: false, error: String(error) };
+    return { type: 'ERROR', success: false, error: errorMessage };
   }
 }
 

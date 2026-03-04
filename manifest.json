@@ -5,12 +5,13 @@
   "description": "Enhance Jira Plans with powerful features: headcount tracking, resource visibility, and more",
   "host_permissions": [
     "*://*.atlassian.net/*",
-    "*://*.jira.com/*",
-    "*://*.corp.adobe.com/*"
+    "*://*.jira.com/*"
   ],
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "activeTab",
+    "scripting"
   ],
   "content_scripts": [
     {
@@ -18,8 +19,7 @@
         "*://*.atlassian.net/jira/software/c/*/plans*",
         "*://*.atlassian.net/secure/*",
         "*://*.jira.com/jira/software/c/*/plans*",
-        "*://*.jira.com/secure/*",
-        "*://*.corp.adobe.com/secure/*"
+        "*://*.jira.com/secure/*"
       ],
       "js": [
         "content/content-script.js"
