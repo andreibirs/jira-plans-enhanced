@@ -1,6 +1,6 @@
 {
   "name": "jira-plans-enhanced",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Chrome extension enhancing Jira Plans with headcount tracking, resource visibility, and productivity features",
   "author": "Adrian Birsan",
   "license": "MIT",
