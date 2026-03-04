@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate version consistency
+        run: |
+          PKG_VER=$(node -p "require('./package.json').version")
+          MANIFEST_VER=$(node -p "require('./manifest.dist.json').version")
+          TAG_VER=${GITHUB_REF#refs/tags/v}
+          if [ "$PKG_VER" != "$MANIFEST_VER" ] || [ "$PKG_VER" != "$TAG_VER" ]; then
+            echo "Version mismatch: package.json=$PKG_VER, manifest=$MANIFEST_VER, tag=$TAG_VER"
+            exit 1
+          fi
+          echo "✅ All versions match: $PKG_VER"
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test:coverage
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Validate build artifacts
+        run: |
+          if [ ! -f "dist/manifest.json" ]; then
+            echo "Error: dist/manifest.json not found"
+            exit 1
+          fi
+          if [ ! -f "dist/content/content-script.js" ]; then
+            echo "Error: dist/content/content-script.js not found"
+            exit 1
+          fi
+          if [ ! -f "dist/popup/popup.js" ]; then
+            echo "Error: dist/popup/popup.js not found"
+            exit 1
+          fi
+          echo "✅ All required files present"
+
+      - name: Create release zip
+        run: |
+          cd dist
+          zip -r ../jira-plans-enhanced.zip .
+          cd ..
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: jira-plans-enhanced.zip
+          generate_release_notes: true
+          name: Release v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

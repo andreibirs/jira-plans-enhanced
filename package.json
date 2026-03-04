@@ -1,0 +1,64 @@
+{
+  "name": "jira-plans-enhanced",
+  "version": "0.1.0",
+  "description": "Chrome extension enhancing Jira Plans with headcount tracking, resource visibility, and productivity features",
+  "author": "Adrian Birsan",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreibirs/jira-plans-enhanced.git"
+  },
+  "bugs": {
+    "url": "https://github.com/andreibirs/jira-plans-enhanced/issues"
+  },
+  "homepage": "https://github.com/andreibirs/jira-plans-enhanced#readme",
+  "keywords": [
+    "chrome-extension",
+    "jira",
+    "jira-plans",
+    "advanced-roadmaps",
+    "headcount",
+    "team-management",
+    "productivity",
+    "resource-planning",
+    "project-management"
+  ],
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "npm run clean && npm run bundle && npm run copy-assets",
+    "build:dev": "npm run clean && npm run bundle:dev && npm run copy-assets",
+    "bundle": "npm run bundle:content && npm run bundle:popup",
+    "bundle:dev": "npm run bundle:content:dev && npm run bundle:popup:dev",
+    "bundle:content": "esbuild src/content/content-script.ts --bundle --outfile=dist/content/content-script.js --format=iife --target=es2020 --minify",
+    "bundle:content:dev": "esbuild src/content/content-script.ts --bundle --outfile=dist/content/content-script.js --format=iife --target=es2020 --sourcemap",
+    "bundle:popup": "esbuild src/popup/popup.ts --bundle --outfile=dist/popup/popup.js --format=iife --target=es2020 --minify",
+    "bundle:popup:dev": "esbuild src/popup/popup.ts --bundle --outfile=dist/popup/popup.js --format=iife --target=es2020 --sourcemap",
+    "clean": "rm -rf dist",
+    "copy-assets": "cp manifest.dist.json dist/manifest.json && cp -r icons dist/icons && mkdir -p dist/popup && cp src/popup/popup.html dist/popup/popup.html && cp src/popup/popup.css dist/popup/popup.css",
+    "package": "npm run build && cd dist && zip -r ../jira-plans-enhanced.zip .",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "type-check": "tsc --noEmit",
+    "validate": "npm run lint && npm run type-check && npm run test && node scripts/check-versions.js",
+    "preversion": "npm run validate",
+    "version": "node scripts/sync-versions.js && git add manifest.json manifest.dist.json",
+    "postversion": "git push && git push --tags"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.254",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^25.3.3",
+    "@typescript-eslint/eslint-plugin": "^6.18.1",
+    "@typescript-eslint/parser": "^6.18.1",
+    "esbuild": "^0.27.3",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.2.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  }
+}

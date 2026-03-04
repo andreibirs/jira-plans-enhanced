@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jira Plans Enhanced</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <h1>Jira Plans Enhanced</h1>
+      <div class="version">v0.1.0</div>
+    </header>
+
+    <!-- Quick Toggles Section -->
+    <section class="section">
+      <h2>Headcount Tracking</h2>
+      <div class="toggle-group">
+        <label class="toggle">
+          <input type="checkbox" id="showLeftPanelBadges" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">Show Left Panel Badges</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="showTimelineBadges" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">Show Timeline Badges</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="showSprintSpecificBadges" checked>
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">Show Sprint-Specific Badges</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="showZeroCountBadges">
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">Show Zero Count Badges</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Statistics Dashboard Section -->
+    <section class="section">
+      <h2>Statistics Dashboard</h2>
+
+      <!-- Cache Stats -->
+      <div class="stat-group">
+        <h3>Cache</h3>
+        <div class="stat-row">
+          <span class="stat-label">Entries:</span>
+          <span class="stat-value" id="cacheEntries">0 / 100</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Hit Rate:</span>
+          <span class="stat-value" id="cacheHitRate">0%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Size:</span>
+          <span class="stat-value" id="cacheSize">0 KB</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Age Range:</span>
+          <span class="stat-value" id="cacheAgeRange">-</span>
+        </div>
+      </div>
+
+      <!-- Processing Stats -->
+      <div class="stat-group">
+        <h3>Processing</h3>
+        <div class="stat-row">
+          <span class="stat-label">Epics Processed:</span>
+          <span class="stat-value" id="epicsProcessed">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Badges Injected:</span>
+          <span class="stat-value" id="badgesInjected">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">API Calls:</span>
+          <span class="stat-value" id="apiCalls">0 (0 failed)</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Processing Time:</span>
+          <span class="stat-value" id="processingTime">0ms avg</span>
+        </div>
+      </div>
+
+      <!-- Badge Stats -->
+      <div class="stat-group">
+        <h3>Badges</h3>
+        <div class="stat-row">
+          <span class="stat-label">Left Panel:</span>
+          <span class="stat-value" id="leftPanelBadges">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Timeline:</span>
+          <span class="stat-value" id="timelineBadges">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Sprint-Specific:</span>
+          <span class="stat-value" id="sprintBadges">0</span>
+        </div>
+      </div>
+
+      <!-- Error Stats -->
+      <div class="stat-group">
+        <h3>Errors</h3>
+        <div class="stat-row">
+          <span class="stat-label">API Errors:</span>
+          <span class="stat-value" id="apiErrors">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Last Error:</span>
+          <span class="stat-value" id="lastError">None</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cache Controls Section -->
+    <section class="section">
+      <h2>Cache Controls</h2>
+      <div class="control-group">
+        <button id="clearCache" class="btn btn-secondary">Clear All Cache</button>
+        <button id="refreshCache" class="btn btn-secondary">Refresh All</button>
+      </div>
+      <div class="control-group">
+        <input type="text" id="epicKeyInput" placeholder="Enter epic key (e.g., GS-12345)" class="input">
+        <button id="clearEpicCache" class="btn btn-secondary">Clear Epic</button>
+      </div>
+    </section>
+
+    <!-- Advanced Settings Link -->
+    <section class="section">
+      <h2>Settings</h2>
+      <div class="settings-preview">
+        <div class="setting-row">
+          <span class="setting-label">Cache TTL:</span>
+          <span class="setting-value" id="cacheTtl">5 minutes</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Debounce Delay:</span>
+          <span class="setting-value" id="debounceDelay">500ms</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-label">Badge Theme:</span>
+          <span class="setting-value" id="badgeTheme">Auto</span>
+        </div>
+      </div>
+      <button id="openAdvancedSettings" class="btn btn-link">Advanced Settings →</button>
+    </section>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span class="status" id="connectionStatus">Connected to Jira Plans</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
