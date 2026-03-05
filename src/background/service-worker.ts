@@ -109,7 +109,7 @@ async function injectIntoExistingTabs(domain: string, pattern: string): Promise<
 
           // Check if content script is already injected by trying to communicate
           try {
-            const response = await chrome.tabs.sendMessage(tab.id, { type: 'PING' });
+            await chrome.tabs.sendMessage(tab.id, { type: 'PING' });
             console.log(`[Inject Existing] Tab ${tab.id} already has content script, skipping`);
             continue;
           } catch (e) {
@@ -271,7 +271,7 @@ chrome.permissions.onAdded.addListener(async (permissions) => {
 
   for (const origin of permissions.origins) {
     // Extract domain from origin pattern (e.g., "*://example.com/*" -> "example.com")
-    const domainMatch = origin.match(/\/\/([^\/]+)\//);
+    const domainMatch = origin.match(/\/\/([^/]+)\//);
     if (!domainMatch) continue;
 
     const domain = domainMatch[1];

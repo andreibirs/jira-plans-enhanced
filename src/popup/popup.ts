@@ -377,7 +377,7 @@ async function injectContentScriptNow(): Promise<boolean> {
 
     // Check if content script is already injected
     try {
-      const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
+      await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
       console.log('[Popup] Content script already present, skipping injection');
       return true;
     } catch (e) {
@@ -398,7 +398,7 @@ async function injectContentScriptNow(): Promise<boolean> {
 
       // Verify injection worked
       try {
-        const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
+        await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
         console.log('[Popup] Content script verified active');
         return true;
       } catch (verifyError) {
