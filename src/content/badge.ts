@@ -221,7 +221,7 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
 
   // Styling for timeline bar - needs to be visible on blue background
   // Using absolute positioning, centered on the bar
-  // z-index: High enough for timeline overlays, low enough for sprint headers
+  // z-index: Very high to appear above all Jira UI elements (sprint headers, labels, etc.)
   // Add min-width to ensure entire badge is hoverable
   badge.style.cssText = `
     position: absolute;
@@ -236,7 +236,7 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
     color: #fff;
     display: inline-block;
     pointer-events: auto;
-    z-index: 100;
+    z-index: 9999;
     min-width: 18px;
     height: auto;
     margin: 0;
@@ -367,7 +367,8 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
 
   // Position badge at specific percentage of bar width
   // Use transform to center badge on the calculated position
-  // z-index: Warning badges slightly higher, but reasonable range
+  // z-index: Very high to appear above all Jira UI elements (sprint headers, labels, etc.)
+  // Warning badges get even higher z-index to stand out
   // Add min-width to ensure entire badge is hoverable
   badge.style.cssText = `
     position: absolute;
@@ -382,7 +383,7 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
     color: #fff;
     display: inline-block;
     pointer-events: auto;
-    z-index: ${isNoSprint ? 150 : 100};
+    z-index: ${isNoSprint ? 10000 : 9999};
     min-width: ${isNoSprint ? '24px' : '18px'};
     height: auto;
     margin: 0;
