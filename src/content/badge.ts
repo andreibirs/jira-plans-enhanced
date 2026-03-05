@@ -220,8 +220,8 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
   }
 
   // Styling for timeline bar - needs to be visible on blue background
-  // Using absolute positioning, centered on the bar
-  // z-index: Very high to appear above all Jira UI elements (sprint headers, labels, etc.)
+  // Using absolute positioning, at bottom of bar to avoid overlap with sprint labels
+  // z-index: Moderate value, badges appear below other UI elements by design
   // Add min-width to ensure entire badge is hoverable
   badge.style.cssText = `
     position: absolute;
@@ -236,7 +236,7 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
     color: #fff;
     display: inline-block;
     pointer-events: auto;
-    z-index: 9999;
+    z-index: 100;
     min-width: 18px;
     height: auto;
     margin: 0;
@@ -259,7 +259,27 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
 /* istanbul ignore next */
 export function injectTimelineBadge(issueId: string, count: number, assignees?: string[]): boolean {
   // Find timeline bar by data-name pattern
-  const timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
+  // Note: [data-issue] exists in both left panel (scope-issue) and timeline area
+  // We need the timeline area row, which does NOT have data-name^="scope-issue-"
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      // Skip the epic row (has data-name="scope-issue-...")
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      // This should be the timeline row
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
   if (!timelineBar) {
     return false;
   }
@@ -285,7 +305,26 @@ export function injectTimelineBadge(issueId: string, count: number, assignees?: 
  * Update an existing timeline badge
  */
 export function updateTimelineBadge(issueId: string, count: number, assignees?: string[]): boolean {
-  const timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+  // Find timeline bar by data-name pattern
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      // Skip the epic row (has data-name="scope-issue-...")
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      // This should be the timeline row
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
   if (!timelineBar) {
     return false;
   }
@@ -367,8 +406,9 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
 
   // Position badge at specific percentage of bar width
   // Use transform to center badge on the calculated position
-  // z-index: Very high to appear above all Jira UI elements (sprint headers, labels, etc.)
-  // Warning badges get even higher z-index to stand out
+  // Positioned at bottom of bar to avoid overlap with sprint labels and other UI elements
+  // z-index: Moderate value, badges appear below other UI elements by design
+  // Warning badges get slightly higher z-index to stand out
   // Add min-width to ensure entire badge is hoverable
   badge.style.cssText = `
     position: absolute;
@@ -383,7 +423,7 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
     color: #fff;
     display: inline-block;
     pointer-events: auto;
-    z-index: ${isNoSprint ? 10000 : 9999};
+    z-index: ${isNoSprint ? 150 : 100};
     min-width: ${isNoSprint ? '24px' : '18px'};
     height: auto;
     margin: 0;
@@ -399,7 +439,26 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
  * Clear all timeline badges from a bar
  */
 export function clearTimelineBadges(issueId: string): void {
-  const timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+  // Find timeline bar by data-name pattern
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      // Skip the epic row (has data-name="scope-issue-...")
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      // This should be the timeline row
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
   if (!timelineBar) {
     return;
   }
@@ -424,7 +483,26 @@ export function injectSprintBadges(
   sprintData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: string[] }>,
   unscheduledStories?: string[]
 ): boolean {
-  const timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+  // Find timeline bar by data-name pattern
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      // Skip the epic row (has data-name="scope-issue-...")
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      // This should be the timeline row
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
   if (!timelineBar) {
     return false;
   }

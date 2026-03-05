@@ -30,9 +30,13 @@ async function saveAllowlistedDomains(domains: AllowlistedDomain[]): Promise<voi
 }
 
 /**
- * Register content script for a domain pattern
+ * Register content script for a domain pattern and inject into existing tabs
+ * Returns number of tabs that were successfully injected
+ *
+ * Note: For custom domains without host permissions, the registration will fail.
+ * This is expected - users will need to click the popup on each tab to activate.
  */
-async function registerContentScriptForDomain(domain: string, pattern: string): Promise<void> {
+async function registerContentScriptForDomain(domain: string, pattern: string): Promise<number> {
   const scriptId = `custom-domain-${domain.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
   try {
@@ -43,20 +47,99 @@ async function registerContentScriptForDomain(domain: string, pattern: string): 
       // Ignore if doesn't exist
     }
 
-    // Register new content script
-    await chrome.scripting.registerContentScripts([
-      {
-        id: scriptId,
-        matches: [pattern],
-        js: ['content/content-script.js'],
-        runAt: 'document_end',
-      },
-    ]);
+    // Register content script for future page loads
+    try {
+      await chrome.scripting.registerContentScripts([
+        {
+          id: scriptId,
+          matches: [pattern],
+          js: ['content/content-script.js'],
+          runAt: 'document_end',
+        },
+      ]);
+      console.log(`[Service Worker] Registered content script for ${domain}`);
+    } catch (error) {
+      console.log(`[Service Worker] Cannot register for ${domain} (may lack permissions)`);
+    }
 
-    console.log(`Registered content script for domain: ${domain}`);
+    // Inject into existing tabs
+    return await injectIntoExistingTabs(domain, pattern);
   } catch (error) {
-    console.error(`Failed to register content script for ${domain}:`, error);
-    throw error;
+    console.error(`[Service Worker] Error registering ${domain}:`, error);
+    return 0;
+  }
+}
+
+/**
+ * Inject content script into existing tabs that match the domain pattern
+ * Returns number of tabs that were successfully injected
+ */
+async function injectIntoExistingTabs(domain: string, pattern: string): Promise<number> {
+  console.log(`[Inject Existing] Starting injection for domain: ${domain}, pattern: ${pattern}`);
+
+  try {
+    // Get all tabs
+    const tabs = await chrome.tabs.query({});
+    console.log(`[Inject Existing] Found ${tabs.length} total tabs`);
+
+    // Convert match pattern to regex
+    // Pattern is like "*://jira.corp.adobe.com/jira/software/c/*/plans*"
+    // IMPORTANT: Escape special chars BEFORE replacing * with .*
+    const patternRegex = pattern
+      .replace(/\./g, '\\.')  // Escape dots FIRST
+      .replace(/\//g, '\\/')  // Escape forward slashes
+      .replace(/\*/g, '.*');  // Replace * with .* LAST
+    const regex = new RegExp(`^${patternRegex}$`);
+    console.log(`[Inject Existing] Pattern regex: ${regex}`);
+
+    let injectedCount = 0;
+    let matchedCount = 0;
+
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) {
+        console.log(`[Inject Existing] Skipping tab ${tab.id} - no URL`);
+        continue;
+      }
+
+      try {
+        // Test if URL matches the pattern
+        if (regex.test(tab.url)) {
+          matchedCount++;
+          console.log(`[Inject Existing] ✓ Tab ${tab.id} matches pattern: ${tab.url}`);
+
+          // Check if content script is already injected by trying to communicate
+          try {
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'PING' });
+            console.log(`[Inject Existing] Tab ${tab.id} already has content script, skipping`);
+            continue;
+          } catch (e) {
+            // Content script not present, proceed with injection
+            console.log(`[Inject Existing] Tab ${tab.id} needs injection`);
+          }
+
+          // Try to inject (will succeed for built-in domains, fail for custom domains without permissions)
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content/content-script.js'],
+          });
+
+          injectedCount++;
+          console.log(`[Inject Existing] ✓ Successfully injected into tab ${tab.id}`);
+        } else {
+          console.log(`[Inject Existing] ✗ Tab ${tab.id} does not match: ${tab.url}`);
+        }
+      } catch (error) {
+        // Expected to fail for custom domains without host permissions
+        console.log(`[Inject Existing] Cannot inject into tab ${tab.id} (expected for custom domains): ${error}`);
+        // Continue with other tabs
+      }
+    }
+
+    console.log(`[Inject Existing] Complete: ${matchedCount} matched, ${injectedCount} injected`);
+    return injectedCount;
+  } catch (error) {
+    console.error('[Inject Existing] Failed to inject into existing tabs:', error);
+    return 0;
   }
 }
 
@@ -174,6 +257,36 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
 });
 
 /**
+ * Listen for permission grants and auto-inject into existing tabs
+ */
+chrome.permissions.onAdded.addListener(async (permissions) => {
+  console.log('[Service Worker] Permissions granted:', permissions.origins);
+
+  if (!permissions.origins || permissions.origins.length === 0) {
+    return;
+  }
+
+  // For each newly granted origin, check if it's in our allowlist and inject
+  const domains = await loadAllowlistedDomains();
+
+  for (const origin of permissions.origins) {
+    // Extract domain from origin pattern (e.g., "*://example.com/*" -> "example.com")
+    const domainMatch = origin.match(/\/\/([^\/]+)\//);
+    if (!domainMatch) continue;
+
+    const domain = domainMatch[1];
+
+    // Find matching domain in allowlist
+    const domainInfo = domains.find(d => d.domain === domain);
+    if (domainInfo) {
+      console.log(`[Service Worker] Auto-injecting for ${domain}...`);
+      const injectedCount = await registerContentScriptForDomain(domainInfo.domain, domainInfo.pattern);
+      console.log(`[Service Worker] Injected into ${injectedCount} tab(s)`);
+    }
+  }
+});
+
+/**
  * Handle messages from popup
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -191,6 +304,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Async response
   }
 
+  if (message.type === 'RE_REGISTER_DOMAIN') {
+    // Re-register domain after host permissions are granted
+    registerContentScriptForDomain(message.domain, message.pattern)
+      .then(injectedCount => sendResponse({ success: true, injectedCount }))
+      .catch(error => sendResponse({ success: false, error: String(error) }));
+    return true; // Async response
+  }
+
   if (message.type === 'GET_ALLOWLISTED_DOMAINS') {
     loadAllowlistedDomains()
       .then(domains => sendResponse({ success: true, domains }))
@@ -204,7 +325,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /**
  * Add domain to allowlist
  */
-async function handleAddDomain(domain: string, pattern: string): Promise<{ success: boolean; error?: string }> {
+async function handleAddDomain(domain: string, pattern: string): Promise<{ success: boolean; error?: string; injectedCount?: number }> {
   try {
     const domains = await loadAllowlistedDomains();
 
@@ -222,10 +343,23 @@ async function handleAddDomain(domain: string, pattern: string): Promise<{ succe
     domains.push(newDomain);
     await saveAllowlistedDomains(domains);
 
-    // Register content script
-    await registerContentScriptForDomain(domain, pattern);
+    console.log(`[Service Worker] Domain ${domain} added to allowlist`);
 
-    return { success: true };
+    // Only register content script if we already have permissions
+    // Otherwise, wait for chrome.permissions.onAdded event to handle it
+    const hasPermissions = await chrome.permissions.contains({
+      origins: [pattern],
+    });
+
+    let injectedCount = 0;
+    if (hasPermissions) {
+      console.log(`[Service Worker] Permissions already granted, registering now`);
+      injectedCount = await registerContentScriptForDomain(domain, pattern);
+    } else {
+      console.log(`[Service Worker] No permissions yet, will register when permissions.onAdded fires`);
+    }
+
+    return { success: true, injectedCount };
   } catch (error) {
     return { success: false, error: String(error) };
   }

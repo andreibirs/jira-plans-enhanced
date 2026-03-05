@@ -1,11 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Jira Plans Enhanced",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Enhance Jira Plans with powerful features: headcount tracking, resource visibility, and more",
   "host_permissions": [
     "*://*.atlassian.net/*",
     "*://*.jira.com/*"
+  ],
+  "optional_host_permissions": [
+    "*://*/*"
   ],
   "permissions": [
     "storage",

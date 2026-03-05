@@ -375,7 +375,27 @@ function isSprintView(): boolean {
  */
 function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<string, number>, totalCount: number, unscheduledStories?: string[], sprintAssignees?: Map<string, string[]>): void {
   // Find the timeline bar to get its position
-  const timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
+  // Note: [data-issue] exists in both left panel (scope-issue) and timeline area
+  // We need the timeline area row, which does NOT have data-name^="scope-issue-"
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = (row as HTMLElement).getAttribute('data-name');
+      // Skip the epic row (has data-name="scope-issue-...")
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      // This should be the timeline row
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
   if (!timelineBar) {
     return;
   }
@@ -823,9 +843,15 @@ export function setupObserver(debounceMs: number = 500): MutationObserver {
 }
 
 /**
- * Handle messages from popup
+ * Handle messages from popup and service worker
  */
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  // Handle PING from service worker (to detect if content script is already injected)
+  if (typeof message === 'object' && message !== null && 'type' in message && message.type === 'PING') {
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (!isPopupRequest(message)) {
     return false;
   }

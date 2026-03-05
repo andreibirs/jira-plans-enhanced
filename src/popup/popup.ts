@@ -40,6 +40,60 @@ import {
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS;
 let statisticsInterval: NodeJS.Timeout | null = null;
 let currentTabDomain: string | null = null;
+let activationInProgress = false; // Prevents UI state reset during activation flow
+
+/**
+ * Check if content script is active on current tab
+ */
+async function isContentScriptActive(): Promise<boolean> {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0];
+
+    if (!activeTab?.id) {
+      return false;
+    }
+
+    try {
+      await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  } catch (error) {
+    console.error('[Popup] Failed to check content script status:', error);
+    return false;
+  }
+}
+
+/**
+ * Show/hide UI states based on whether extension is active
+ */
+function updateUIVisibility(isActive: boolean): void {
+  const inactiveState = document.getElementById('inactiveState');
+  const activeState = document.getElementById('activeState');
+
+  if (inactiveState && activeState) {
+    if (isActive) {
+      inactiveState.style.display = 'none';
+      activeState.style.display = 'block';
+    } else {
+      inactiveState.style.display = 'block';
+      activeState.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Update domain management section with current status
+ */
+async function updateDomainManagementSection(): Promise<void> {
+  const activeDomain = document.getElementById('activeDomain');
+
+  if (!activeDomain || !currentTabDomain) return;
+
+  activeDomain.textContent = currentTabDomain;
+}
 
 /**
  * Initialize popup when DOM is ready
@@ -48,9 +102,57 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   await loadCurrentDomain();
   await loadAllowlistedDomains();
+
+  // Check if content script is active (skip if activation in progress to avoid race condition)
+  if (!activationInProgress) {
+    let isActive = await isContentScriptActive();
+
+    // If not active, check permissions status
+    if (!isActive && currentTabDomain) {
+      const isDomainAllowlisted = await isDomainSupportedByTab();
+      if (isDomainAllowlisted) {
+        const pattern = createDomainPattern(currentTabDomain);
+        const hasPermissions = await chrome.permissions.contains({
+          origins: [pattern],
+        });
+
+        if (hasPermissions) {
+          // Domain allowlisted AND has permissions but script not active yet
+          // Service worker might still be injecting, wait and retry
+          console.log('[Popup] Permissions granted but script not active, waiting for injection...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Check again
+          isActive = await isContentScriptActive();
+          if (!isActive) {
+            console.log('[Popup] Still not active after wait, triggering manual injection');
+            await injectContentScriptNow();
+            isActive = await isContentScriptActive();
+          }
+        } else {
+          // Domain allowlisted but no permissions - user denied, so remove domain
+          console.log('[Popup] Cleaning up denied permission for', currentTabDomain);
+          await chrome.runtime.sendMessage({
+            type: 'REMOVE_DOMAIN_FROM_ALLOWLIST',
+            domain: currentTabDomain,
+          });
+          await loadAllowlistedDomains();
+        }
+      }
+    }
+
+    // Update UI visibility based on active state
+    updateUIVisibility(isActive);
+
+    // Only load statistics and start polling if active
+    if (isActive) {
+      await updateDomainManagementSection();
+      await refreshStatistics();
+      startStatisticsPolling();
+    }
+  }
+
   setupEventListeners();
-  await refreshStatistics();
-  startStatisticsPolling();
 });
 
 /**
@@ -131,10 +233,10 @@ async function loadCurrentDomain(): Promise<void> {
     return;
   }
 
-  // Update UI
-  const currentDomainEl = document.getElementById('currentDomain');
-  if (currentDomainEl) {
-    currentDomainEl.textContent = currentTabDomain;
+  // Update UI in both inactive and active states
+  const inactiveDomainEl = document.getElementById('inactiveDomain');
+  if (inactiveDomainEl) {
+    inactiveDomainEl.textContent = currentTabDomain;
   }
 
   // Check if this is a built-in domain
@@ -177,28 +279,45 @@ async function loadAllowlistedDomains(): Promise<void> {
 /**
  * Update domain status UI
  */
-function updateDomainStatus(isAllowlisted: boolean): void {
+async function updateDomainStatus(isAllowlisted: boolean): Promise<void> {
   const statusBadge = document.getElementById('domainStatusBadge');
-  const toggleButton = document.getElementById('toggleDomainAllowlist') as HTMLButtonElement;
-  const domainHelp = document.getElementById('domainHelp');
+  const initialChoice = document.getElementById('initialChoice');
+  const manualModeActive = document.getElementById('manualModeActive');
+  const autoModeActive = document.getElementById('autoModeActive');
 
-  if (!statusBadge || !toggleButton) return;
+  if (!statusBadge) return;
+
+  // Hide all sections first
+  if (initialChoice) initialChoice.style.display = 'none';
+  if (manualModeActive) manualModeActive.style.display = 'none';
+  if (autoModeActive) autoModeActive.style.display = 'none';
 
   if (isAllowlisted) {
-    statusBadge.textContent = 'Allowlisted (auto-injects)';
-    statusBadge.className = 'status-badge allowlisted';
-    toggleButton.textContent = 'Remove from auto-injection';
-    toggleButton.className = 'btn btn-secondary';
-    if (domainHelp) domainHelp.style.display = 'none';
+    // Check if we have host permissions for auto-activation
+    if (currentTabDomain) {
+      const pattern = createDomainPattern(currentTabDomain);
+      const hasHostPermissions = await chrome.permissions.contains({
+        origins: [pattern],
+      });
+
+      if (hasHostPermissions) {
+        // Full auto-activation enabled
+        statusBadge.textContent = 'Auto-activation enabled';
+        statusBadge.className = 'status-badge allowlisted';
+        if (autoModeActive) autoModeActive.style.display = 'block';
+      } else {
+        // Manual mode (activeTab only)
+        statusBadge.textContent = 'Manual mode';
+        statusBadge.className = 'status-badge manual';
+        if (manualModeActive) manualModeActive.style.display = 'block';
+      }
+    }
   } else {
+    // Not allowlisted - show initial choice
     statusBadge.textContent = 'Not allowlisted';
     statusBadge.className = 'status-badge not-allowlisted';
-    toggleButton.textContent = 'Add to allowlist';
-    toggleButton.className = 'btn btn-primary';
-    if (domainHelp) domainHelp.style.display = 'block';
+    if (initialChoice) initialChoice.style.display = 'block';
   }
-
-  toggleButton.style.display = 'block';
 }
 
 /**
@@ -240,88 +359,114 @@ function updateAllowlistUI(domains: any[]): void {
 }
 
 /**
- * Toggle current domain in allowlist
- */
-async function toggleCurrentDomainAllowlist(): Promise<void> {
-  if (!currentTabDomain) return;
-
-  // Check current status
-  const response = await chrome.runtime.sendMessage({ type: 'GET_ALLOWLISTED_DOMAINS' });
-  if (!response.success) return;
-
-  const domains = response.domains || [];
-  const isAllowlisted = domains.some((d: any) => d.domain === currentTabDomain);
-
-  if (isAllowlisted) {
-    await removeDomainFromAllowlist(currentTabDomain);
-  } else {
-    await addDomainToAllowlist(currentTabDomain);
-  }
-}
-
-/**
- * Inject content script into current tab
+ * Inject content script into current tab using activeTab permission
+ * (No host permissions needed - activeTab grants temporary access)
  */
 async function injectContentScriptNow(): Promise<boolean> {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const activeTab = tabs[0];
 
-    if (!activeTab?.id) {
+    if (!activeTab?.id || !activeTab.url) {
+      console.error('[Popup] No active tab found');
+      alert('Error: No active tab found');
       return false;
     }
 
-    await chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      files: ['content/content-script.js'],
-    });
+    console.log(`[Popup] Injecting into tab ${activeTab.id}: ${activeTab.url}`);
 
-    // Wait for content script to initialize
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return true;
+    // Check if content script is already injected
+    try {
+      const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
+      console.log('[Popup] Content script already present, skipping injection');
+      return true;
+    } catch (e) {
+      // Not injected yet, proceed
+      console.log('[Popup] Content script not present, injecting...');
+    }
+
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        files: ['content/content-script.js'],
+      });
+
+      console.log(`[Popup] Content script injected successfully`);
+
+      // Wait for content script to initialize
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify injection worked
+      try {
+        const response = await chrome.tabs.sendMessage(activeTab.id, { type: 'PING' });
+        console.log('[Popup] Content script verified active');
+        return true;
+      } catch (verifyError) {
+        console.error('[Popup] Content script injection verification failed:', verifyError);
+        alert('Warning: Content script may not have loaded. Try refreshing the page.');
+        return false;
+      }
+    } catch (injectError) {
+      console.error('[Popup] Failed to execute script:', injectError);
+      alert(`Failed to inject content script: ${injectError}`);
+      return false;
+    }
   } catch (error) {
-    console.error('Failed to inject content script:', error);
+    console.error('[Popup] Failed to inject content script:', error);
+    alert(`Unexpected error: ${error}`);
     return false;
   }
 }
 
+
 /**
- * Add domain to allowlist
+ * Activate extension for current domain
+ * Adds domain to allowlist and requests permissions for auto-injection
  */
-async function addDomainToAllowlist(domain: string): Promise<void> {
-  const pattern = createDomainPattern(domain);
+async function activateExtension(): Promise<void> {
+  if (!currentTabDomain) return;
+
+  activationInProgress = true;
+  const pattern = createDomainPattern(currentTabDomain);
 
   try {
-    const response = await chrome.runtime.sendMessage({
+    setStatus(`Adding ${currentTabDomain}...`, 'loading');
+
+    // Add to allowlist FIRST (before permission prompt which closes popup)
+    const addResponse = await chrome.runtime.sendMessage({
       type: 'ADD_DOMAIN_TO_ALLOWLIST',
-      domain,
+      domain: currentTabDomain,
       pattern,
     });
 
-    if (response.success) {
-      setStatus(`Added ${domain}, activating...`, 'loading');
-      await loadAllowlistedDomains();
-
-      // Icon should update automatically via storage.onChanged listener in background
-      // Give it a moment to update
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Inject content script immediately so user doesn't need to refresh
-      const injected = await injectContentScriptNow();
-
-      if (injected) {
-        setStatus('Connected to Jira Plans', 'connected');
-        // Refresh statistics to show badges are working
-        await refreshStatistics();
-      } else {
-        setStatus('Added. Please refresh the page.', 'loading');
-      }
-    } else {
-      setStatus(`Failed: ${response.error}`, 'disconnected');
+    if (!addResponse.success) {
+      setStatus(`Failed: ${addResponse.error}`, 'disconnected');
+      activationInProgress = false;
+      return;
     }
+
+    await loadAllowlistedDomains();
+    setStatus('Requesting permissions...', 'loading');
+
+    // Request host permissions (popup will close during this prompt)
+    const granted = await chrome.permissions.request({
+      origins: [pattern],
+    });
+
+    if (!granted) {
+      setStatus('Permission denied', 'disconnected');
+      activationInProgress = false;
+      return;
+    }
+
+    // Service worker will auto-inject via chrome.permissions.onAdded event
+    // This code may or may not run depending on if popup stayed open
+
+    activationInProgress = false;
   } catch (error) {
-    console.error('Failed to add domain:', error);
-    setStatus('Failed to add domain', 'disconnected');
+    console.error('[Popup] Activation failed:', error);
+    setStatus('Activation failed', 'disconnected');
+    activationInProgress = false;
   }
 }
 
@@ -337,8 +482,27 @@ async function removeDomainFromAllowlist(domain: string): Promise<void> {
 
     if (response.success) {
       setStatus(`Removed ${domain} from auto-injection`, 'loading');
+
+      // Also remove host permissions if granted
+      const pattern = createDomainPattern(domain);
+      try {
+        await chrome.permissions.remove({
+          origins: [pattern],
+        });
+      } catch (e) {
+        console.log('[Popup] No permissions to remove');
+      }
+
       await loadAllowlistedDomains();
-      setTimeout(() => setStatus('Connected to Jira Plans', 'connected'), 1500);
+
+      // If removing current domain, transition to inactive state
+      if (domain === currentTabDomain) {
+        console.log('[Popup] Removed current domain, transitioning to inactive state');
+        updateUIVisibility(false);
+        setStatus('Domain removed', 'disconnected');
+      } else {
+        setStatus('Domain removed', 'connected');
+      }
     } else {
       setStatus(`Failed: ${response.error}`, 'disconnected');
     }
@@ -436,9 +600,15 @@ function setupEventListeners(): void {
     alert('Advanced settings coming soon!');
   });
 
-  // Domain allowlist toggle
-  const toggleDomainAllowlist = document.getElementById('toggleDomainAllowlist');
-  toggleDomainAllowlist?.addEventListener('click', toggleCurrentDomainAllowlist);
+  // Inactive state button
+  const activateExtensionBtn = document.getElementById('activateExtension');
+  activateExtensionBtn?.addEventListener('click', () => activateExtension());
+
+  // Active state domain management button
+  const removeDomain = document.getElementById('removeDomain');
+  removeDomain?.addEventListener('click', () => {
+    if (currentTabDomain) removeDomainFromAllowlist(currentTabDomain);
+  });
 }
 
 /**
@@ -687,13 +857,11 @@ async function handleClearEpicCache(): Promise<void> {
 
 /**
  * Update status message and indicator
+ * (No-op: footer removed for cleaner UI)
  */
 function setStatus(message: string, type: 'connected' | 'disconnected' | 'loading'): void {
-  const status = document.getElementById('connectionStatus');
-  if (status) {
-    status.textContent = message;
-    status.className = `status ${type}`;
-  }
+  // Footer removed - status messages no longer displayed
+  console.log(`[Popup Status] ${type}: ${message}`);
 }
 
 // Cleanup on popup close
