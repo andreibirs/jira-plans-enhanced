@@ -27,7 +27,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "build": "npm run lint && npm run clean && npm run bundle && npm run copy-assets",
+    "build": "npm run lint && npm test && npm run clean && npm run bundle && npm run copy-assets",
     "build:dev": "npm run clean && npm run bundle:dev && npm run copy-assets",
     "bundle": "npm run bundle:content && npm run bundle:popup && npm run bundle:background",
     "bundle:dev": "npm run bundle:content:dev && npm run bundle:popup:dev && npm run bundle:background:dev",
