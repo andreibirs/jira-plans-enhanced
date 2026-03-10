@@ -75,25 +75,28 @@ To enable automatic publishing, you need to obtain API credentials from the Chro
 
 You need to generate a refresh token that allows GitHub Actions to publish on your behalf.
 
-1. **Install chrome-webstore-upload-cli** locally:
+1. **Run the token generator script**:
    ```bash
-   npm install -g chrome-webstore-upload-cli
+   node scripts/get-chrome-token.js
    ```
 
-2. **Run the token generator**:
-   ```bash
-   chrome-webstore-upload-cli get-refresh-token
-   ```
+2. **Follow the prompts**:
+   - Enter your Client ID (from Step 2)
+   - Enter your Client Secret (from Step 2)
+   - Script will display an authorization URL
 
-3. **Follow the prompts**:
-   - Enter your Client ID
-   - Enter your Client Secret
-   - A browser window will open asking you to authorize the app
+3. **Authorize in browser**:
+   - Open the URL in your browser
    - Sign in with the Google account that owns the Chrome Web Store extension
    - Grant permissions
-   - You'll be redirected to `http://localhost:8818/` with a code
+   - You'll be redirected to `http://localhost:8818/?code=...` (page may show error - this is OK)
 
-4. **Copy the Refresh Token** from the CLI output (e.g., `1//0abc123def456...`)
+4. **Complete authorization**:
+   - Copy the `code` parameter from the URL (everything after `code=`)
+   - Paste it into the terminal
+   - Script will exchange the code for a refresh token
+
+5. **Copy the Refresh Token** from the script output (e.g., `1//0abc123def456...`)
 
 ### Step 4: Get Extension ID
 
