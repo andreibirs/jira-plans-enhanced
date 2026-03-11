@@ -14,6 +14,7 @@ import { getSprintLayout, getOverlappingSprints, calculateBadgePosition, SprintS
 import { ExtensionSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, mergeWithDefaults } from '../shared/settings';
 import { ExtensionStatistics, INITIAL_STATISTICS, calculateHitRate } from '../shared/statistics';
 import { PopupRequest, PopupResponse, isPopupRequest } from '../shared/messages';
+import { AssigneeInfo } from '../shared/types';
 
 export interface ProcessResult {
   processed: number;
@@ -21,14 +22,14 @@ export interface ProcessResult {
 }
 
 // Cache for API results to avoid spamming Jira
-// Key: epicKey (e.g., "PROJ-123"), Value: {totalCount, sprintCounts, timestamp, unscheduledStories, assigneeNames}
+// Key: epicKey (e.g., "PROJ-123"), Value: {totalCount, sprintCounts, timestamp, unscheduledStories, assignees}
 interface CachedAssigneeData {
   totalCount: number;
   sprintCounts: Map<string, number>; // sprintName -> count
   timestamp: number; // CRITICAL: Add timestamp for TTL checking
   unscheduledStories?: string[]; // Story keys not assigned to any sprint
-  sprintAssignees: Map<string, string[]>; // sprintName -> assignee names
-  totalAssignees: string[]; // All assignee names for this epic
+  sprintAssignees: Map<string, AssigneeInfo[]>; // sprintName -> assignee details
+  totalAssignees: AssigneeInfo[]; // All assignee details for this epic
 }
 const assigneeCountCache = new Map<string, CachedAssigneeData>();
 
@@ -373,7 +374,7 @@ function isSprintView(): boolean {
  * Update timeline badges with sprint-specific counts (sprint view)
  * or total count (roadmap view)
  */
-function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<string, number>, totalCount: number, unscheduledStories?: string[], sprintAssignees?: Map<string, string[]>): void {
+function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<string, number>, totalCount: number, unscheduledStories?: string[], sprintAssignees?: Map<string, AssigneeInfo[]>): void {
   // Find the timeline bar to get its position
   let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
 
@@ -407,7 +408,18 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
     // ROADMAP VIEW: Show single badge with total count
     // Clear first to ensure clean state, then inject
     clearTimelineBadges(issueId);
-    const totalAssignees = sprintAssignees ? Array.from(new Set([...sprintAssignees.values()].flat())).sort() : [];
+    // Deduplicate assignees across all sprints by accountId
+    const uniqueAssigneeMap = new Map<string, AssigneeInfo>();
+    if (sprintAssignees) {
+      for (const assignees of sprintAssignees.values()) {
+        for (const assignee of assignees) {
+          uniqueAssigneeMap.set(assignee.accountId, assignee);
+        }
+      }
+    }
+    const totalAssignees = Array.from(uniqueAssigneeMap.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName)
+    );
     injectTimelineBadge(issueId, totalCount, totalAssignees);
     return;
   }
@@ -432,7 +444,18 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
     } else {
       // No unscheduled stories - show regular single badge centered
       clearTimelineBadges(issueId);
-      const totalAssignees = sprintAssignees ? Array.from(new Set([...sprintAssignees.values()].flat())).sort() : [];
+      // Deduplicate assignees across all sprints by accountId
+      const uniqueAssigneeMap = new Map<string, AssigneeInfo>();
+      if (sprintAssignees) {
+        for (const assignees of sprintAssignees.values()) {
+          for (const assignee of assignees) {
+            uniqueAssigneeMap.set(assignee.accountId, assignee);
+          }
+        }
+      }
+      const totalAssignees = Array.from(uniqueAssigneeMap.values()).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      );
       injectTimelineBadge(issueId, totalCount, totalAssignees);
     }
     return;
@@ -471,7 +494,7 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
   const overlappingSprints = getOverlappingSprints(barLeftPercent, barRightPercent, teamSprintLayout);
 
   // Prepare badge data for each overlapping sprint
-  const sprintBadgeData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: string[] }> = [];
+  const sprintBadgeData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: AssigneeInfo[] }> = [];
 
   // Check for stories not assigned to any sprint first
   const noSprintCount = sprintCounts.get('__NO_SPRINT__') || 0;
@@ -578,32 +601,42 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     const data = await response.json();
     const issues = data.issues || [];
 
-    // Extract unique assignee names (overall count)
-    const uniqueAssignees = new Set<string>();
+    // Extract unique assignee info (overall count) - keyed by accountId
+    const uniqueAssignees = new Map<string, AssigneeInfo>();
 
     // Group assignees by sprint
-    const assigneesBySprint = new Map<string, Set<string>>();
+    const assigneesBySprint = new Map<string, Map<string, AssigneeInfo>>();
 
     // Track assignees not assigned to any sprint
-    const assigneesWithoutSprint = new Set<string>();
+    const assigneesWithoutSprint = new Map<string, AssigneeInfo>();
     const unscheduledStories: string[] = [];
 
     for (const issue of issues) {
       const assignee = issue.fields?.assignee;
-      const assigneeName = assignee?.displayName;
       const issueKey = issue.key;
 
-      if (assigneeName) {
-        uniqueAssignees.add(assigneeName);
-      }
+      if (assignee && assignee.accountId) {
+        // Extract assignee info
+        const assigneeInfo: AssigneeInfo = {
+          accountId: assignee.accountId,
+          displayName: assignee.displayName || 'Unknown',
+          avatarUrls: {
+            '16x16': assignee.avatarUrls?.['16x16'] || '',
+            '24x24': assignee.avatarUrls?.['24x24'] || '',
+            '32x32': assignee.avatarUrls?.['32x32'] || '',
+            '48x48': assignee.avatarUrls?.['48x48'] || '',
+          },
+          emailAddress: assignee.emailAddress,
+        };
 
-      // Parse sprint data from customfield_11002
-      const sprintData = issue.fields?.customfield_11002;
+        uniqueAssignees.set(assignee.accountId, assigneeInfo);
 
-      if (assigneeName) {
+        // Parse sprint data from customfield_11002
+        const sprintData = issue.fields?.customfield_11002;
+
         if (!sprintData || !Array.isArray(sprintData) || sprintData.length === 0) {
           // Story has assignee but NO sprint assignment
-          assigneesWithoutSprint.add(assigneeName);
+          assigneesWithoutSprint.set(assignee.accountId, assigneeInfo);
           if (issueKey) {
             unscheduledStories.push(issueKey);
           }
@@ -615,9 +648,9 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
               // Normalize sprint name to match DOM format
               const normalizedName = normalizeSprintName(sprintName);
               if (!assigneesBySprint.has(normalizedName)) {
-                assigneesBySprint.set(normalizedName, new Set());
+                assigneesBySprint.set(normalizedName, new Map());
               }
-              assigneesBySprint.get(normalizedName)!.add(assigneeName);
+              assigneesBySprint.get(normalizedName)!.set(assignee.accountId, assigneeInfo);
             }
           }
         }
@@ -626,32 +659,38 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
 
     const count = uniqueAssignees.size;
 
-    // Convert assignees by sprint to counts AND names
+    // Convert assignees by sprint to counts AND full assignee info
     const sprintCounts = new Map<string, number>();
-    const sprintAssignees = new Map<string, string[]>();
+    const sprintAssignees = new Map<string, AssigneeInfo[]>();
     assigneesBySprint.forEach((assignees, sprint) => {
       sprintCounts.set(sprint, assignees.size);
-      sprintAssignees.set(sprint, Array.from(assignees).sort());
+      sprintAssignees.set(sprint, Array.from(assignees.values()).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      ));
     });
 
     // Add special entry for unscheduled stories ONLY if there are NO sprint assignments at all
     // If assigneesBySprint is empty, that means ALL stories are unscheduled → WARNING
     if (assigneesWithoutSprint.size > 0 && assigneesBySprint.size === 0) {
       sprintCounts.set('__NO_SPRINT__', assigneesWithoutSprint.size);
-      sprintAssignees.set('__NO_SPRINT__', Array.from(assigneesWithoutSprint).sort());
+      sprintAssignees.set('__NO_SPRINT__', Array.from(assigneesWithoutSprint.values()).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      ));
     }
 
     // CRITICAL: Evict oldest entry if cache is full
     evictOldestCacheEntry();
 
-    // CRITICAL: Cache the result with timestamp, unscheduled stories, and assignee names
+    // CRITICAL: Cache the result with timestamp, unscheduled stories, and assignee info
     assigneeCountCache.set(epicKey, {
       totalCount: count,
       sprintCounts,
       timestamp: Date.now(), // CRITICAL: Add timestamp for TTL
       unscheduledStories: unscheduledStories.length > 0 ? unscheduledStories : undefined,
       sprintAssignees,
-      totalAssignees: Array.from(uniqueAssignees).sort(),
+      totalAssignees: Array.from(uniqueAssignees.values()).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      ),
     });
 
     statistics.cache.totalEntries = assigneeCountCache.size;

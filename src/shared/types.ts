@@ -78,8 +78,30 @@ export type HeadcountResponse = GetHeadcountResponse | ErrorResponse;
  * Jira assignee information from API response
  */
 export interface JiraAssignee {
+  accountId: string;
   emailAddress: string;
   displayName: string;
+  avatarUrls?: {
+    '16x16'?: string;
+    '24x24'?: string;
+    '32x32'?: string;
+    '48x48'?: string;
+  };
+}
+
+/**
+ * Enhanced assignee information for avatar display
+ */
+export interface AssigneeInfo {
+  accountId: string;
+  displayName: string;
+  avatarUrls: {
+    '16x16': string;
+    '24x24': string;
+    '32x32': string;
+    '48x48': string;
+  };
+  emailAddress?: string;
 }
 
 /**

@@ -6,6 +6,9 @@
  * 2. On the timeline bars in the right panel
  */
 
+import { AssigneeInfo } from '../shared/types';
+import { createAvatarBadge } from './avatar-badge';
+
 export const BADGE_CLASS = 'jira-plans-headcount-badge';
 export const TIMELINE_BADGE_CLASS = 'jira-plans-timeline-badge';
 
@@ -191,7 +194,7 @@ export function removeBadge(epicRow: HTMLElement, epicKey?: string): boolean {
  * Styled differently to be visible on the blue bar background
  * Uses position: absolute with no parent modification (relies on bar already having positioning)
  */
-export function createTimelineBadge(count: number, assignees?: string[]): HTMLSpanElement {
+export function createTimelineBadge(count: number, assignees?: AssigneeInfo[]): HTMLSpanElement {
   const badge = document.createElement('span');
   badge.className = TIMELINE_BADGE_CLASS;
 
@@ -212,7 +215,7 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
 
     if (assignees && assignees.length > 0) {
       // Include engineer names in tooltip
-      const assigneesList = assignees.join(', ');
+      const assigneesList = assignees.map(a => a.displayName).join(', ');
       badge.title = `Total: ${engineersText}\n\nEngineers: ${assigneesList}`;
     } else {
       badge.title = `Total: ${engineersText}`;
@@ -257,7 +260,7 @@ export function createTimelineBadge(count: number, assignees?: string[]): HTMLSp
  * with realistic pixel values. Better validated through visual testing.
  */
 /* istanbul ignore next */
-export function injectTimelineBadge(issueId: string, count: number, assignees?: string[]): boolean {
+export function injectTimelineBadge(issueId: string, count: number, assignees?: AssigneeInfo[]): boolean {
   // Find timeline bar by data-name pattern
   let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
 
@@ -304,7 +307,7 @@ export function injectTimelineBadge(issueId: string, count: number, assignees?: 
 /**
  * Update an existing timeline badge
  */
-export function updateTimelineBadge(issueId: string, count: number, assignees?: string[]): boolean {
+export function updateTimelineBadge(issueId: string, count: number, assignees?: AssigneeInfo[]): boolean {
   // Find timeline bar by data-name pattern
   let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
 
@@ -362,7 +365,7 @@ export function updateTimelineBadge(issueId: string, count: number, assignees?: 
  * @param sprintName - Sprint name for tooltip
  * @param positionPercent - Position as percentage of bar width (0-100)
  */
-export function createSprintBadge(count: number, sprintName: string, positionPercent: number, unscheduledStories?: string[], assignees?: string[]): HTMLSpanElement {
+export function createSprintBadge(count: number, sprintName: string, positionPercent: number, unscheduledStories?: string[], assignees?: AssigneeInfo[]): HTMLSpanElement {
   const badge = document.createElement('span');
   badge.className = TIMELINE_BADGE_CLASS;
   badge.setAttribute('data-sprint', sprintName);
@@ -388,11 +391,11 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
     if (isNoSprint && unscheduledStories && unscheduledStories.length > 0) {
       // Include story keys in tooltip for warning badge
       const storiesList = unscheduledStories.join(', ');
-      const assigneesList = assignees && assignees.length > 0 ? `\n\nEngineers: ${assignees.join(', ')}` : '';
+      const assigneesList = assignees && assignees.length > 0 ? `\n\nEngineers: ${assignees.map(a => a.displayName).join(', ')}` : '';
       badge.title = `⚠ Stories not assigned to sprints: ${engineersText}${assigneesList}\n\nUnscheduled stories: ${storiesList}`;
     } else if (assignees && assignees.length > 0) {
       // Include engineer names in tooltip for regular badges
-      const assigneesList = assignees.join(', ');
+      const assigneesList = assignees.map(a => a.displayName).join(', ');
       badge.title = isNoSprint
         ? `⚠ Stories not assigned to sprints: ${engineersText}\n\nEngineers: ${assigneesList}`
         : `${sprintName}: ${engineersText}\n\nEngineers: ${assigneesList}`;
@@ -480,7 +483,7 @@ export function clearTimelineBadges(issueId: string): void {
 /* istanbul ignore next */
 export function injectSprintBadges(
   issueId: string,
-  sprintData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: string[] }>,
+  sprintData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: AssigneeInfo[] }>,
   unscheduledStories?: string[]
 ): boolean {
   // Find timeline bar by data-name pattern
