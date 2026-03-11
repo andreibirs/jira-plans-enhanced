@@ -14,6 +14,23 @@ global.console = {
 };
 
 import { processEpics, setupObserver, __test_populateCache__, __test_clearCache__ } from './content-script';
+import { AssigneeInfo } from '../shared/types';
+
+// Helper to create mock assignee info for tests
+function createMockAssignee(name: string): AssigneeInfo {
+  const accountId = name.replace(/\s+/g, '-').toLowerCase();
+  return {
+    accountId,
+    displayName: name,
+    avatarUrls: {
+      '16x16': `https://avatar.example.com/${accountId}/16`,
+      '24x24': `https://avatar.example.com/${accountId}/24`,
+      '32x32': `https://avatar.example.com/${accountId}/32`,
+      '48x48': `https://avatar.example.com/${accountId}/48`,
+    },
+    emailAddress: `${accountId}@example.com`,
+  };
+}
 
 describe('Content Script', () => {
   describe('processEpics', () => {
@@ -22,8 +39,8 @@ describe('Content Script', () => {
     });
 
     it('should process all epics and inject badges with real Jira Plans structure', () => {
-      __test_populateCache__('EPIC-123', 2, ['Alice Smith', 'John Doe']);
-      __test_populateCache__('EPIC-456', 2, ['Alice Smith', 'John Doe']);
+      __test_populateCache__('EPIC-123', 2, [createMockAssignee('Alice Smith'), createMockAssignee('John Doe')]);
+      __test_populateCache__('EPIC-456', 2, [createMockAssignee('Alice Smith'), createMockAssignee('John Doe')]);
 
       document.body.innerHTML = `
         <div class="jira-plans">
@@ -76,7 +93,7 @@ describe('Content Script', () => {
     });
 
     it('should skip injection but update existing badges', () => {
-      __test_populateCache__('EPIC-123', 1, ['Alice Smith']);
+      __test_populateCache__('EPIC-123', 1, [createMockAssignee('Alice Smith')]);
 
       document.body.innerHTML = `
         <div data-issue="18794394" data-name="scope-issue-18794394">
@@ -143,7 +160,7 @@ describe('Content Script', () => {
     });
 
     it('should process new epics when they are added to DOM', (done) => {
-      __test_populateCache__('EPIC-789', 1, ['Alice Smith']);
+      __test_populateCache__('EPIC-789', 1, [createMockAssignee('Alice Smith')]);
 
       document.body.innerHTML = `<div class="jira-plans" id="plan-container"></div>`;
 
@@ -181,7 +198,7 @@ describe('Content Script', () => {
 
     it('should update badges when assignees are added', (done) => {
       // First populate with 1 assignee
-      __test_populateCache__('EPIC-123', 1, ['Alice Smith']);
+      __test_populateCache__('EPIC-123', 1, [createMockAssignee('Alice Smith')]);
 
       document.body.innerHTML = `
         <div class="jira-plans" id="plan-container">
@@ -213,7 +230,7 @@ describe('Content Script', () => {
         }
 
         // Update cache to reflect the new assignee
-        __test_populateCache__('EPIC-123', 2, ['Alice Smith', 'John Doe']);
+        __test_populateCache__('EPIC-123', 2, [createMockAssignee('Alice Smith'), createMockAssignee('John Doe')]);
 
         // Give MutationObserver time to process (longer timeout for CI environments)
         setTimeout(() => {

@@ -192,6 +192,7 @@ describe('Shared Types', () => {
         key: 'STORY-123',
         fields: {
           assignee: {
+            accountId: '12345',
             emailAddress: 'engineer@example.com',
             displayName: 'Engineer Name'
           }
@@ -234,6 +235,7 @@ describe('Shared Types', () => {
             key: 'STORY-1',
             fields: {
               assignee: {
+                accountId: 'user-1-id',
                 emailAddress: 'user1@example.com',
                 displayName: 'User 1'
               }

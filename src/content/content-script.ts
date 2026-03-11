@@ -420,7 +420,15 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
     const totalAssignees = Array.from(uniqueAssigneeMap.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName)
     );
-    injectTimelineBadge(issueId, totalCount, totalAssignees);
+    // Get avatar display options from settings
+    const displayMode = currentSettings.appearance.badgeDisplayMode;
+    const avatarSize = currentSettings.appearance.avatarSize === 'small' ? 16 :
+                       currentSettings.appearance.avatarSize === 'large' ? 24 : 20;
+    const avatarOptions = {
+      maxVisible: currentSettings.appearance.maxVisibleAvatars,
+      size: avatarSize,
+    };
+    injectTimelineBadge(issueId, totalCount, totalAssignees, displayMode, avatarOptions);
     return;
   }
 
@@ -456,7 +464,15 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
       const totalAssignees = Array.from(uniqueAssigneeMap.values()).sort((a, b) =>
         a.displayName.localeCompare(b.displayName)
       );
-      injectTimelineBadge(issueId, totalCount, totalAssignees);
+      // Get avatar display options from settings
+      const displayMode = currentSettings.appearance.badgeDisplayMode;
+      const avatarSize = currentSettings.appearance.avatarSize === 'small' ? 16 :
+                         currentSettings.appearance.avatarSize === 'large' ? 24 : 20;
+      const avatarOptions = {
+        maxVisible: currentSettings.appearance.maxVisibleAvatars,
+        size: avatarSize,
+      };
+      injectTimelineBadge(issueId, totalCount, totalAssignees, displayMode, avatarOptions);
     }
     return;
   }
@@ -1056,7 +1072,7 @@ if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
  * Test helper: Populate cache with assignee data for testing
  * This allows tests to simulate cached data and test badge injection
  */
-export function __test_populateCache__(epicKey: string, totalCount: number, assignees: string[] = []): void {
+export function __test_populateCache__(epicKey: string, totalCount: number, assignees: AssigneeInfo[] = []): void {
   assigneeCountCache.set(epicKey, {
     totalCount,
     sprintCounts: new Map(),
