@@ -527,6 +527,23 @@ function applySettingsToUI(): void {
   if (showSprintSpecificBadges) showSprintSpecificBadges.checked = currentSettings.display.showSprintSpecificBadges;
   if (showZeroCountBadges) showZeroCountBadges.checked = currentSettings.display.showZeroCountBadges;
 
+  // Avatar display settings
+  const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
+  const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
+  const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
+  const avatarSize = document.getElementById('avatarSize') as HTMLSelectElement;
+  const avatarSettings = document.getElementById('avatarSettings');
+
+  if (badgeDisplayMode) badgeDisplayMode.value = currentSettings.appearance.badgeDisplayMode;
+  if (maxVisibleAvatars) maxVisibleAvatars.value = String(currentSettings.appearance.maxVisibleAvatars);
+  if (maxVisibleAvatarsValue) maxVisibleAvatarsValue.textContent = String(currentSettings.appearance.maxVisibleAvatars);
+  if (avatarSize) avatarSize.value = currentSettings.appearance.avatarSize;
+
+  // Show/hide avatar settings based on display mode
+  if (avatarSettings) {
+    avatarSettings.style.display = currentSettings.appearance.badgeDisplayMode === 'count' ? 'none' : 'block';
+  }
+
   // Settings preview
   updateSettingsPreview();
 }
@@ -581,6 +598,40 @@ function setupEventListeners(): void {
 
   showZeroCountBadges?.addEventListener('change', () => {
     currentSettings.display.showZeroCountBadges = showZeroCountBadges.checked;
+    saveSettings();
+  });
+
+  // Avatar display settings
+  const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
+  const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
+  const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
+  const avatarSize = document.getElementById('avatarSize') as HTMLSelectElement;
+  const avatarSettings = document.getElementById('avatarSettings');
+
+  badgeDisplayMode?.addEventListener('change', () => {
+    currentSettings.appearance.badgeDisplayMode = badgeDisplayMode.value as 'count' | 'avatars' | 'hybrid';
+
+    // Show/hide avatar-specific settings
+    if (avatarSettings) {
+      avatarSettings.style.display = badgeDisplayMode.value === 'count' ? 'none' : 'block';
+    }
+
+    saveSettings();
+  });
+
+  maxVisibleAvatars?.addEventListener('input', () => {
+    const value = parseInt(maxVisibleAvatars.value, 10);
+    currentSettings.appearance.maxVisibleAvatars = value;
+
+    if (maxVisibleAvatarsValue) {
+      maxVisibleAvatarsValue.textContent = String(value);
+    }
+
+    saveSettings();
+  });
+
+  avatarSize?.addEventListener('change', () => {
+    currentSettings.appearance.avatarSize = avatarSize.value as 'small' | 'normal' | 'large';
     saveSettings();
   });
 

@@ -236,18 +236,94 @@ body {
 .setting-row {
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
+  align-items: center;
+  padding: 10px 0;
 }
 
 .setting-label {
   font-size: 13px;
   color: #666;
+  font-weight: 500;
 }
 
 .setting-value {
   font-size: 13px;
   font-weight: 500;
   color: #333;
+}
+
+.setting-select {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  color: #333;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+.setting-select:hover {
+  border-color: #667eea;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.setting-slider {
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: #ddd;
+  outline: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.setting-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.setting-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.2s;
+}
+
+.setting-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+}
+
+.slider-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #667eea;
+  min-width: 20px;
+  text-align: center;
 }
 
 /* Footer removed for cleaner UI */

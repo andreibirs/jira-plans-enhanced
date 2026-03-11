@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="popup-header">
       <h1>Jira Plans Enhanced</h1>
-      <div class="version">v0.4.0</div>
+      <div class="version">v0.4.1</div>
     </header>
 
     <!-- Inactive State: Clean activation screen -->
@@ -63,6 +63,44 @@
       </div>
     </section>
 
+    <!-- Avatar Display Section -->
+    <section class="section">
+      <h2>Avatar Display</h2>
+
+      <!-- Display Mode -->
+      <div class="setting-row">
+        <label for="badgeDisplayMode" class="setting-label">Badge Style</label>
+        <select id="badgeDisplayMode" class="setting-select">
+          <option value="count">Numbers Only</option>
+          <option value="avatars">Profile Pictures</option>
+          <option value="hybrid">Pictures + Numbers</option>
+        </select>
+      </div>
+
+      <!-- Avatar-specific settings (hidden when mode is 'count') -->
+      <div id="avatarSettings" style="display: block;">
+
+        <!-- Max Visible Avatars -->
+        <div class="setting-row">
+          <label for="maxVisibleAvatars" class="setting-label">Max Avatars Shown</label>
+          <div class="slider-container">
+            <input type="range" id="maxVisibleAvatars" class="setting-slider" min="2" max="8" value="4">
+            <span id="maxVisibleAvatarsValue" class="slider-value">4</span>
+          </div>
+        </div>
+
+        <!-- Avatar Size -->
+        <div class="setting-row">
+          <label for="avatarSize" class="setting-label">Avatar Size</label>
+          <select id="avatarSize" class="setting-select">
+            <option value="small">Small (16px)</option>
+            <option value="normal">Normal (20px)</option>
+            <option value="large">Large (24px)</option>
+          </select>
+        </div>
+
+      </div>
+    </section>
 
     <!-- Statistics Dashboard Section -->
     <section class="section">
