@@ -194,7 +194,12 @@ export function removeBadge(epicRow: HTMLElement, epicKey?: string): boolean {
  * Styled differently to be visible on the blue bar background
  * Uses position: absolute with no parent modification (relies on bar already having positioning)
  */
-export function createTimelineBadge(count: number, assignees?: AssigneeInfo[]): HTMLSpanElement {
+export function createTimelineBadge(
+  count: number,
+  assignees?: AssigneeInfo[],
+  displayMode: 'count' | 'avatars' | 'hybrid' = 'count',
+  avatarOptions?: { maxVisible?: number; size?: number }
+): HTMLSpanElement {
   const badge = document.createElement('span');
   badge.className = TIMELINE_BADGE_CLASS;
 
@@ -203,50 +208,144 @@ export function createTimelineBadge(count: number, assignees?: AssigneeInfo[]): 
     badge.setAttribute('data-zero-count', 'true');
   }
 
-  if (count === -1) {
-    badge.textContent = '...';
-    badge.title = 'Loading assignee count...';
-  } else if (count === 0) {
-    badge.textContent = '0';
-    badge.title = 'No assignees';
+  // Handle loading and zero states (always show as numeric)
+  if (count === -1 || count === 0) {
+    if (count === -1) {
+      badge.textContent = '...';
+      badge.title = 'Loading assignee count...';
+    } else {
+      badge.textContent = '0';
+      badge.title = 'No assignees';
+    }
+
+    // Basic styling for loading/zero states
+    badge.style.cssText = `
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 2px 6px;
+      background-color: rgba(0, 0, 0, 0.6);
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #fff;
+      display: inline-block;
+      pointer-events: auto;
+      z-index: 100;
+      min-width: 18px;
+      cursor: help;
+      text-align: center;
+    `;
+
+    return badge;
+  }
+
+  // Determine avatar size based on avatarOptions or use default
+  const avatarSize = avatarOptions?.size || 20;  // Timeline avatars are smaller
+  const maxVisible = avatarOptions?.maxVisible || 4;
+
+  // Create badge content based on display mode
+  if (displayMode === 'avatars' && assignees && assignees.length > 0) {
+    // Avatar mode: show profile pictures
+    const avatarBadge = createAvatarBadge(assignees, {
+      maxVisible,
+      size: avatarSize,
+      overlap: 6,
+      showTooltip: true,
+    });
+
+    // Wrap avatar badge in positioned container
+    badge.style.cssText = `
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    badge.appendChild(avatarBadge);
+  } else if (displayMode === 'hybrid' && assignees && assignees.length > 0) {
+    // Hybrid mode: show both avatars and count
+    const container = document.createElement('div');
+    container.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    `;
+
+    const avatarBadge = createAvatarBadge(assignees, {
+      maxVisible: Math.min(maxVisible, 3),  // Show fewer in hybrid mode
+      size: avatarSize,
+      overlap: 4,
+      showTooltip: false,  // Tooltip on container instead
+    });
+
+    const countBadge = document.createElement('span');
+    countBadge.textContent = `${count}`;
+    countBadge.style.cssText = `
+      padding: 2px 6px;
+      background-color: rgba(0, 0, 0, 0.6);
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #fff;
+      min-width: 18px;
+      text-align: center;
+    `;
+
+    container.appendChild(avatarBadge);
+    container.appendChild(countBadge);
+
+    badge.style.cssText = `
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      z-index: 100;
+    `;
+
+    const engineersText = `${count} unique ${count === 1 ? 'engineer' : 'engineers'}`;
+    const assigneesList = assignees.map(a => a.displayName).join(', ');
+    badge.title = `Total: ${engineersText}\n\nEngineers: ${assigneesList}`;
+
+    badge.appendChild(container);
   } else {
+    // Count mode (default): show numeric badge
     badge.textContent = `${count}`;
     const engineersText = `${count} unique ${count === 1 ? 'engineer' : 'engineers'}`;
 
     if (assignees && assignees.length > 0) {
-      // Include engineer names in tooltip
       const assigneesList = assignees.map(a => a.displayName).join(', ');
       badge.title = `Total: ${engineersText}\n\nEngineers: ${assigneesList}`;
     } else {
       badge.title = `Total: ${engineersText}`;
     }
-  }
 
-  // Styling for timeline bar - needs to be visible on blue background
-  // Using absolute positioning, at bottom of bar to avoid overlap with sprint labels
-  // z-index: Moderate value, badges appear below other UI elements by design
-  // Add min-width to ensure entire badge is hoverable
-  badge.style.cssText = `
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    padding: 2px 6px;
-    background-color: rgba(0, 0, 0, 0.6);
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: bold;
-    color: #fff;
-    display: inline-block;
-    pointer-events: auto;
-    z-index: 100;
-    min-width: 18px;
-    height: auto;
-    margin: 0;
-    cursor: help;
-    text-align: center;
-    box-sizing: border-box;
-  `;
+    badge.style.cssText = `
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 2px 6px;
+      background-color: rgba(0, 0, 0, 0.6);
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #fff;
+      display: inline-block;
+      pointer-events: auto;
+      z-index: 100;
+      min-width: 18px;
+      cursor: help;
+      text-align: center;
+    `;
+  }
 
   return badge;
 }
@@ -260,7 +359,13 @@ export function createTimelineBadge(count: number, assignees?: AssigneeInfo[]): 
  * with realistic pixel values. Better validated through visual testing.
  */
 /* istanbul ignore next */
-export function injectTimelineBadge(issueId: string, count: number, assignees?: AssigneeInfo[]): boolean {
+export function injectTimelineBadge(
+  issueId: string,
+  count: number,
+  assignees?: AssigneeInfo[],
+  displayMode: 'count' | 'avatars' | 'hybrid' = 'count',
+  avatarOptions?: { maxVisible?: number; size?: number }
+): boolean {
   // Find timeline bar by data-name pattern
   let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
 
@@ -298,7 +403,7 @@ export function injectTimelineBadge(issueId: string, count: number, assignees?: 
     timelineBar.style.position = 'relative';
   }
 
-  const badge = createTimelineBadge(count, assignees);
+  const badge = createTimelineBadge(count, assignees, displayMode, avatarOptions);
   timelineBar.appendChild(badge);
 
   return true;
