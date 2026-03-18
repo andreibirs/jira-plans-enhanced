@@ -13,6 +13,14 @@ export const BADGE_CLASS = 'jira-plans-headcount-badge';
 export const TIMELINE_BADGE_CLASS = 'jira-plans-timeline-badge';
 export const STORY_AVATAR_CLASS = 'jira-plans-story-avatar';
 
+/** Adaptive font size for timeline badges — scales down for longer text */
+function timelineBadgeFontSize(text: string): string {
+  const len = text.length;
+  if (len <= 4) return '10px';
+  if (len <= 10) return '9px';
+  return '8px';
+}
+
 /**
  * Count all badges currently in the DOM
  */
@@ -45,7 +53,7 @@ export function clearAllBadges(): number {
  * Create a badge element with the specified count
  * Use count = -1 for loading state
  */
-export function createBadge(count: number, isExpanded: boolean, epicKey?: string): HTMLSpanElement {
+export function createBadge(count: number, isExpanded: boolean, epicKey?: string, displayOverride?: { text: string; tooltip: string }): HTMLSpanElement {
   const badge = document.createElement('span');
   badge.className = BADGE_CLASS;
 
@@ -59,7 +67,10 @@ export function createBadge(count: number, isExpanded: boolean, epicKey?: string
     badge.setAttribute('data-zero-count', 'true');
   }
 
-  if (count === -1) {
+  if (displayOverride) {
+    badge.textContent = displayOverride.text;
+    badge.title = displayOverride.tooltip;
+  } else if (count === -1) {
     // Loading state
     badge.textContent = '... 👥';
     badge.title = 'Loading assignee count...';
@@ -92,7 +103,7 @@ export function createBadge(count: number, isExpanded: boolean, epicKey?: string
  * Using stable selector: a[href*="/browse/"] for epic key link
  * Badge is placed BEFORE the epic key's parent container
  */
-export function injectBadge(epicRow: HTMLElement, count: number, isExpanded: boolean, epicKey?: string): boolean {
+export function injectBadge(epicRow: HTMLElement, count: number, isExpanded: boolean, epicKey?: string, displayOverride?: { text: string; tooltip: string }): boolean {
   // Extract epic key from link if not provided
   if (!epicKey) {
     const epicKeyElement = epicRow.querySelector('a[href*="/browse/"]');
@@ -121,7 +132,7 @@ export function injectBadge(epicRow: HTMLElement, count: number, isExpanded: boo
     return false;
   }
 
-  const badge = createBadge(count, isExpanded, epicKey);
+  const badge = createBadge(count, isExpanded, epicKey, displayOverride);
 
   // Insert badge BEFORE the parent container (as a sibling)
   parentContainer.insertAdjacentElement('beforebegin', badge);
@@ -133,7 +144,7 @@ export function injectBadge(epicRow: HTMLElement, count: number, isExpanded: boo
  * Update an existing badge with new count
  * Returns true if update was successful, false if badge doesn't exist
  */
-export function updateBadge(epicRow: HTMLElement, count: number, isExpanded: boolean, epicKey?: string): boolean {
+export function updateBadge(epicRow: HTMLElement, count: number, isExpanded: boolean, epicKey?: string, displayOverride?: { text: string; tooltip: string }): boolean {
   // Try to find badge by epic key first
   let badge: HTMLSpanElement | null = null;
 
@@ -150,7 +161,10 @@ export function updateBadge(epicRow: HTMLElement, count: number, isExpanded: boo
     return false;
   }
 
-  if (count === -1) {
+  if (displayOverride) {
+    badge.textContent = displayOverride.text;
+    badge.title = displayOverride.tooltip;
+  } else if (count === -1) {
     // Loading state
     badge.textContent = '... 👥';
     badge.title = 'Loading assignee count...';
@@ -198,7 +212,7 @@ export function removeBadge(epicRow: HTMLElement, epicKey?: string): boolean {
 export function createTimelineBadge(
   count: number,
   assignees?: AssigneeInfo[],
-  displayMode: 'count' | 'avatars' = 'count',
+  displayMode: 'count' | 'avatars' | 'personweeks' = 'count',
   avatarOptions?: { maxVisible?: number }
 ): HTMLSpanElement {
   const badge = document.createElement('span');
@@ -235,8 +249,12 @@ export function createTimelineBadge(
       pointer-events: auto;
       z-index: 2;
       min-width: 18px;
+      max-width: 90%;
       cursor: help;
       text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     `;
 
     return badge;
@@ -269,7 +287,8 @@ export function createTimelineBadge(
     badge.appendChild(avatarBadge);
   } else {
     // Count mode (default): show numeric badge
-    badge.textContent = `${count}`;
+    const text = `${count}`;
+    badge.textContent = text;
     const engineersText = `${count} unique ${count === 1 ? 'engineer' : 'engineers'}`;
 
     if (assignees && assignees.length > 0) {
@@ -287,15 +306,19 @@ export function createTimelineBadge(
       padding: 2px 6px;
       background-color: rgba(0, 0, 0, 0.6);
       border-radius: 3px;
-      font-size: 10px;
+      font-size: ${timelineBadgeFontSize(text)};
       font-weight: bold;
       color: #fff;
       display: inline-block;
       pointer-events: auto;
       z-index: 2;
       min-width: 18px;
+      max-width: 90%;
       cursor: help;
       text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     `;
   }
 
@@ -315,7 +338,7 @@ export function injectTimelineBadge(
   issueId: string,
   count: number,
   assignees?: AssigneeInfo[],
-  displayMode: 'count' | 'avatars' = 'count',
+  displayMode: 'count' | 'avatars' | 'personweeks' = 'count',
   avatarOptions?: { maxVisible?: number; size?: number }
 ): boolean {
   // Find timeline bar by data-name pattern
@@ -428,7 +451,7 @@ export function createSprintBadge(
   positionPercent: number,
   unscheduledStories?: string[],
   assignees?: AssigneeInfo[],
-  displayMode: 'count' | 'avatars' = 'count',
+  displayMode: 'count' | 'avatars' | 'personweeks' = 'count',
   avatarOptions?: { maxVisible?: number }
 ): HTMLSpanElement {
   const badge = document.createElement('span');
@@ -524,7 +547,8 @@ export function createSprintBadge(
     badge.title = tooltipText;
   } else {
     // Count mode (default) or warning badge: show numeric badge
-    badge.textContent = isNoSprint ? `⚠ ${count}` : `${count}`;
+    const text = isNoSprint ? `⚠ ${count}` : `${count}`;
+    badge.textContent = text;
     badge.title = tooltipText;
 
     badge.style.cssText = `
@@ -535,15 +559,19 @@ export function createSprintBadge(
       padding: 2px 6px;
       background-color: ${backgroundColor};
       border-radius: 3px;
-      font-size: 10px;
+      font-size: ${timelineBadgeFontSize(text)};
       font-weight: bold;
       color: #fff;
       display: inline-block;
       pointer-events: auto;
       z-index: ${isNoSprint ? 3 : 2};
       min-width: ${isNoSprint ? '24px' : '18px'};
+      max-width: 90%;
       cursor: help;
       text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     `;
   }
 
@@ -597,7 +625,7 @@ export function injectSprintBadges(
   issueId: string,
   sprintData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: AssigneeInfo[] }>,
   unscheduledStories?: string[],
-  displayMode: 'count' | 'avatars' = 'count',
+  displayMode: 'count' | 'avatars' | 'personweeks' = 'count',
   avatarOptions?: { maxVisible?: number }
 ): boolean {
   // Find timeline bar by data-name pattern
@@ -707,7 +735,89 @@ export function injectStoryAvatar(issueId: string, assignee: AssigneeInfo): bool
 }
 
 /**
- * Clear all story avatar badges from the DOM
+ * Inject a person-weeks badge onto a story's timeline bar
+ *
+ * Shows "X SP (Y PW)" for estimated stories — SP is story's own, PW is the person's total.
+ * Shows "⚠ No SP" in orange for stories without story points.
+ */
+export function injectStoryPwBadge(issueId: string, detail: { sp: number; personPw: number } | null): boolean {
+  // Find timeline bar for this story
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
+  if (!timelineBar) {
+    return false;
+  }
+
+  // Don't inject if already present
+  if (timelineBar.querySelector(`.${STORY_AVATAR_CLASS}`)) {
+    return false;
+  }
+
+  // Ensure bar has position context
+  const computedPosition = window.getComputedStyle(timelineBar).position;
+  if (computedPosition === 'static') {
+    timelineBar.style.position = 'relative';
+  }
+
+  const isUnestimated = detail === null;
+  const wrapper = document.createElement('div');
+  wrapper.className = STORY_AVATAR_CLASS;
+  wrapper.setAttribute('data-issue-id', issueId);
+
+  const badge = document.createElement('span');
+  badge.textContent = isUnestimated ? '⚠ No SP' : `${detail.sp} SP (${detail.personPw} PW)`;
+  badge.title = isUnestimated
+    ? 'This story has no story points assigned'
+    : `${detail.sp} story points — assignee totals ${detail.personPw} person-week${detail.personPw === 1 ? '' : 's'}`;
+
+  const bgColor = isUnestimated ? 'rgba(255, 152, 0, 0.85)' : 'rgba(100, 50, 150, 0.75)';
+  badge.style.cssText = `
+    padding: 1px 5px;
+    background-color: ${bgColor};
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: bold;
+    color: #fff;
+    white-space: nowrap;
+    cursor: help;
+  `;
+
+  wrapper.style.cssText = `
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
+  `;
+
+  badge.style.pointerEvents = 'auto';
+
+  wrapper.appendChild(badge);
+  timelineBar.appendChild(wrapper);
+  return true;
+}
+
+/**
+ * Clear all story avatar/PW badges from the DOM
  */
 export function clearAllStoryAvatars(): number {
   const allAvatars = document.querySelectorAll(`.${STORY_AVATAR_CLASS}`);

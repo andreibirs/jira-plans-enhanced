@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="popup-header">
       <h1>Jira Plans Enhanced</h1>
-      <div class="version">v0.4.1</div>
+      <div class="version">v0.6.0</div>
     </header>
 
     <!-- Inactive State: Clean activation screen -->
@@ -63,7 +63,7 @@
         <label class="toggle">
           <input type="checkbox" id="showStoryAvatars" checked>
           <span class="toggle-slider"></span>
-          <span class="toggle-label">Show Story Avatars</span>
+          <span class="toggle-label">Show Story-Level Details</span>
         </label>
       </div>
     </section>
@@ -78,10 +78,11 @@
         <select id="badgeDisplayMode" class="setting-select">
           <option value="count">Numbers Only</option>
           <option value="avatars">Profile Pictures</option>
+          <option value="personweeks">Person Weeks</option>
         </select>
       </div>
 
-      <!-- Avatar-specific settings (hidden when mode is 'count') -->
+      <!-- Avatar-specific settings (hidden when mode is not 'avatars') -->
       <div id="avatarSettings" style="display: block;">
 
         <!-- Max Visible Avatars -->
@@ -90,6 +91,20 @@
           <div class="slider-container">
             <input type="range" id="maxVisibleAvatars" class="setting-slider" min="2" max="8" value="4">
             <span id="maxVisibleAvatarsValue" class="slider-value">4</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Person Weeks settings (hidden when mode is not 'personweeks') -->
+      <div id="pwSettings" style="display: none;">
+
+        <!-- SP Threshold -->
+        <div class="setting-row">
+          <label for="spThresholdPerPw" class="setting-label">SP Threshold (1 PW ≤)</label>
+          <div class="slider-container">
+            <input type="range" id="spThresholdPerPw" class="setting-slider" min="1" max="13" value="5">
+            <span id="spThresholdPerPwValue" class="slider-value">5</span>
           </div>
         </div>
 

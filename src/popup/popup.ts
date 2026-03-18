@@ -533,13 +533,22 @@ function applySettingsToUI(): void {
   const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
   const avatarSettings = document.getElementById('avatarSettings');
 
+  const spThresholdPerPw = document.getElementById('spThresholdPerPw') as HTMLInputElement;
+  const spThresholdPerPwValue = document.getElementById('spThresholdPerPwValue');
+  const pwSettings = document.getElementById('pwSettings');
+
   if (badgeDisplayMode) badgeDisplayMode.value = currentSettings.appearance.badgeDisplayMode;
   if (maxVisibleAvatars) maxVisibleAvatars.value = String(currentSettings.appearance.maxVisibleAvatars);
   if (maxVisibleAvatarsValue) maxVisibleAvatarsValue.textContent = String(currentSettings.appearance.maxVisibleAvatars);
+  if (spThresholdPerPw) spThresholdPerPw.value = String(currentSettings.appearance.spThresholdPerPw);
+  if (spThresholdPerPwValue) spThresholdPerPwValue.textContent = String(currentSettings.appearance.spThresholdPerPw);
 
-  // Show/hide avatar settings based on display mode
+  // Show/hide mode-specific settings
   if (avatarSettings) {
-    avatarSettings.style.display = currentSettings.appearance.badgeDisplayMode === 'count' ? 'none' : 'block';
+    avatarSettings.style.display = currentSettings.appearance.badgeDisplayMode === 'avatars' ? 'block' : 'none';
+  }
+  if (pwSettings) {
+    pwSettings.style.display = currentSettings.appearance.badgeDisplayMode === 'personweeks' ? 'block' : 'none';
   }
 
   // Settings preview
@@ -610,13 +619,19 @@ function setupEventListeners(): void {
   const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
   const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
   const avatarSettings = document.getElementById('avatarSettings');
+  const spThresholdPerPw = document.getElementById('spThresholdPerPw') as HTMLInputElement;
+  const spThresholdPerPwValue = document.getElementById('spThresholdPerPwValue');
+  const pwSettings = document.getElementById('pwSettings');
 
   badgeDisplayMode?.addEventListener('change', () => {
-    currentSettings.appearance.badgeDisplayMode = badgeDisplayMode.value as 'count' | 'avatars';
+    currentSettings.appearance.badgeDisplayMode = badgeDisplayMode.value as 'count' | 'avatars' | 'personweeks';
 
-    // Show/hide avatar-specific settings
+    // Show/hide mode-specific settings
     if (avatarSettings) {
-      avatarSettings.style.display = badgeDisplayMode.value === 'count' ? 'none' : 'block';
+      avatarSettings.style.display = badgeDisplayMode.value === 'avatars' ? 'block' : 'none';
+    }
+    if (pwSettings) {
+      pwSettings.style.display = badgeDisplayMode.value === 'personweeks' ? 'block' : 'none';
     }
 
     saveSettings();
@@ -628,6 +643,17 @@ function setupEventListeners(): void {
 
     if (maxVisibleAvatarsValue) {
       maxVisibleAvatarsValue.textContent = String(value);
+    }
+
+    saveSettings();
+  });
+
+  spThresholdPerPw?.addEventListener('input', () => {
+    const value = parseInt(spThresholdPerPw.value, 10);
+    currentSettings.appearance.spThresholdPerPw = value;
+
+    if (spThresholdPerPwValue) {
+      spThresholdPerPwValue.textContent = String(value);
     }
 
     saveSettings();
