@@ -519,11 +519,13 @@ function applySettingsToUI(): void {
   const showTimelineBadges = document.getElementById('showTimelineBadges') as HTMLInputElement;
   const showSprintSpecificBadges = document.getElementById('showSprintSpecificBadges') as HTMLInputElement;
   const showZeroCountBadges = document.getElementById('showZeroCountBadges') as HTMLInputElement;
+  const showStoryAvatars = document.getElementById('showStoryAvatars') as HTMLInputElement;
 
   if (showLeftPanelBadges) showLeftPanelBadges.checked = currentSettings.display.showLeftPanelBadges;
   if (showTimelineBadges) showTimelineBadges.checked = currentSettings.display.showTimelineBadges;
   if (showSprintSpecificBadges) showSprintSpecificBadges.checked = currentSettings.display.showSprintSpecificBadges;
   if (showZeroCountBadges) showZeroCountBadges.checked = currentSettings.display.showZeroCountBadges;
+  if (showStoryAvatars) showStoryAvatars.checked = currentSettings.display.showStoryAvatars;
 
   // Avatar display settings
   const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
@@ -576,6 +578,7 @@ function setupEventListeners(): void {
   const showTimelineBadges = document.getElementById('showTimelineBadges') as HTMLInputElement;
   const showSprintSpecificBadges = document.getElementById('showSprintSpecificBadges') as HTMLInputElement;
   const showZeroCountBadges = document.getElementById('showZeroCountBadges') as HTMLInputElement;
+  const showStoryAvatars = document.getElementById('showStoryAvatars') as HTMLInputElement;
 
   showLeftPanelBadges?.addEventListener('change', () => {
     currentSettings.display.showLeftPanelBadges = showLeftPanelBadges.checked;
@@ -594,6 +597,11 @@ function setupEventListeners(): void {
 
   showZeroCountBadges?.addEventListener('change', () => {
     currentSettings.display.showZeroCountBadges = showZeroCountBadges.checked;
+    saveSettings();
+  });
+
+  showStoryAvatars?.addEventListener('change', () => {
+    currentSettings.display.showStoryAvatars = showStoryAvatars.checked;
     saveSettings();
   });
 

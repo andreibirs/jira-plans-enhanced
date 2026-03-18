@@ -59,6 +59,35 @@ export function findEpicRows(): HTMLElement[] {
 }
 
 /**
+ * Check if a row is a story (not an epic)
+ *
+ * Stories have avatarId=18815 in their issue type icon background-image
+ */
+function isStoryRow(row: HTMLElement): boolean {
+  const iconElement = row.querySelector('[style*="avatarId"]') as HTMLElement;
+  if (!iconElement) {
+    return false;
+  }
+
+  const backgroundImage = iconElement.style.backgroundImage;
+  return backgroundImage.includes('avatarId=18815');
+}
+
+/**
+ * Find all story rows in the current Jira Plans view
+ *
+ * Story rows are identified by:
+ * - data-issue attribute (contains issue ID)
+ * - data-name attribute starting with "scope-issue-"
+ * - Issue type icon with avatarId=18815 (story avatar)
+ */
+export function findStoryRows(): HTMLElement[] {
+  const allRows = document.querySelectorAll('[data-issue][data-name^="scope-issue-"]');
+  const storyRows = Array.from(allRows).filter(row => isStoryRow(row as HTMLElement));
+  return storyRows as HTMLElement[];
+}
+
+/**
  * Extract assignee information from visible rows
  *
  * Strategy:

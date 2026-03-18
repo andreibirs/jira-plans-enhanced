@@ -11,6 +11,7 @@ import { createAvatarBadge } from './avatar-badge';
 
 export const BADGE_CLASS = 'jira-plans-headcount-badge';
 export const TIMELINE_BADGE_CLASS = 'jira-plans-timeline-badge';
+export const STORY_AVATAR_CLASS = 'jira-plans-story-avatar';
 
 /**
  * Count all badges currently in the DOM
@@ -34,7 +35,7 @@ export function countBadges(): { leftPanel: number; timeline: number; sprint: nu
  * Clear all badges from the DOM
  */
 export function clearAllBadges(): number {
-  const allBadges = document.querySelectorAll(`.${BADGE_CLASS}, .${TIMELINE_BADGE_CLASS}`);
+  const allBadges = document.querySelectorAll(`.${BADGE_CLASS}, .${TIMELINE_BADGE_CLASS}, .${STORY_AVATAR_CLASS}`);
   const count = allBadges.length;
   allBadges.forEach(badge => badge.remove());
   return count;
@@ -639,4 +640,78 @@ export function injectSprintBadges(
   }
 
   return true;
+}
+
+/**
+ * Inject a single assignee avatar onto a story's timeline bar
+ *
+ * Places a circular avatar badge centered on the story's timeline bar.
+ * If no avatar URL is available, falls back to colored initials.
+ */
+export function injectStoryAvatar(issueId: string, assignee: AssigneeInfo): boolean {
+  // Find timeline bar for this story
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+
+  if (!timelineBar) {
+    return false;
+  }
+
+  // Don't inject if already present
+  if (timelineBar.querySelector(`.${STORY_AVATAR_CLASS}`)) {
+    return false;
+  }
+
+  // Ensure bar has position context
+  const computedPosition = window.getComputedStyle(timelineBar).position;
+  if (computedPosition === 'static') {
+    timelineBar.style.position = 'relative';
+  }
+
+  const avatarBadge = createAvatarBadge([assignee], {
+    maxVisible: 1,
+    size: 16,
+    overlap: 0,
+    showTooltip: true,
+  });
+
+  // Wrap in a positioned container
+  const wrapper = document.createElement('div');
+  wrapper.className = STORY_AVATAR_CLASS;
+  wrapper.setAttribute('data-issue-id', issueId);
+  wrapper.style.cssText = `
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    z-index: 2;
+  `;
+  wrapper.appendChild(avatarBadge);
+
+  timelineBar.appendChild(wrapper);
+  return true;
+}
+
+/**
+ * Clear all story avatar badges from the DOM
+ */
+export function clearAllStoryAvatars(): number {
+  const allAvatars = document.querySelectorAll(`.${STORY_AVATAR_CLASS}`);
+  const count = allAvatars.length;
+  allAvatars.forEach(avatar => avatar.remove());
+  return count;
 }

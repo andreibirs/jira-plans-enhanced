@@ -8,8 +8,8 @@
  * - Update badges when epics expand/collapse
  */
 
-import { findEpicRows, extractEpicData } from './dom-parser';
-import { injectSprintBadges, injectTimelineBadge, injectBadge, updateBadge, countBadges, clearAllBadges, clearTimelineBadges, BADGE_CLASS, TIMELINE_BADGE_CLASS } from './badge';
+import { findEpicRows, findStoryRows, extractEpicData } from './dom-parser';
+import { injectSprintBadges, injectTimelineBadge, injectBadge, updateBadge, countBadges, clearAllBadges, clearTimelineBadges, injectStoryAvatar, BADGE_CLASS, TIMELINE_BADGE_CLASS, STORY_AVATAR_CLASS } from './badge';
 import { getSprintLayout, getOverlappingSprints, calculateBadgePosition, SprintSegment, normalizeSprintName } from './sprint-layout';
 import { ExtensionSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, mergeWithDefaults } from '../shared/settings';
 import { ExtensionStatistics, INITIAL_STATISTICS, calculateHitRate } from '../shared/statistics';
@@ -38,6 +38,10 @@ const inflightRequests = new Set<string>();
 
 // Cache sprint layouts per team (key: teamId, value: sprint segments)
 const sprintLayoutCache = new Map<string, SprintSegment[]>();
+
+// Cache story-level assignee data (key: story issueId, value: AssigneeInfo)
+// Populated during epic API fetches, consumed by processStories()
+const storyAssigneeCache = new Map<string, AssigneeInfo>();
 
 // Current settings and statistics
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS;
@@ -204,6 +208,12 @@ function applyDisplaySettings(): void {
     htmlBadge.style.display = shouldShow ? 'inline-block' : 'none';
   });
 
+  // Story avatars
+  const storyAvatars = document.querySelectorAll(`.${STORY_AVATAR_CLASS}`);
+  storyAvatars.forEach((avatar: Element) => {
+    (avatar as HTMLElement).style.display = currentSettings.display.showStoryAvatars ? 'block' : 'none';
+  });
+
   if (currentSettings.debug.logBadgeOperations) {
     console.log('[Headcount] Applied display settings to badges');
   }
@@ -345,6 +355,9 @@ export function processEpics(): ProcessResult {
   // Apply display settings to newly created badges
   applyDisplaySettings();
 
+  // Process story rows for assignee avatars
+  processStories();
+
   // LAZY INITIALIZATION: Setup ResizeObserver after first successful badge injection
   // This ensures timeline bars exist in the DOM before we try to observe them
   if (!resizeObserverSetup && injected > 0) {
@@ -359,6 +372,31 @@ export function processEpics(): ProcessResult {
   }
 
   return { processed, injected };
+}
+
+/**
+ * Process visible story rows and inject assignee avatars on their timeline bars
+ *
+ * Stories are child issues under epics. When we fetch epic data from the API,
+ * we also get each story's assignee. This function finds story rows in the DOM
+ * and overlays the assignee's avatar on the story's timeline bar.
+ */
+function processStories(): void {
+  if (!currentSettings.display.showStoryAvatars) {
+    return;
+  }
+
+  const storyRows = findStoryRows();
+
+  for (const storyRow of storyRows) {
+    const issueId = storyRow.getAttribute('data-issue');
+    if (!issueId) continue;
+
+    const assignee = storyAssigneeCache.get(issueId);
+    if (!assignee) continue;
+
+    injectStoryAvatar(issueId, assignee);
+  }
 }
 
 /**
@@ -630,6 +668,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     for (const issue of issues) {
       const assignee = issue.fields?.assignee;
       const issueKey = issue.key;
+      const storyIssueId = issue.id; // Numeric ID matching data-issue in DOM
 
       // Support both Jira Cloud (accountId) and Jira Server/Data Center (name/key)
       const userId = assignee?.accountId || assignee?.name || assignee?.key;
@@ -649,6 +688,11 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
         };
 
         uniqueAssignees.set(userId, assigneeInfo);
+
+        // Cache story-level assignee for story avatar display
+        if (storyIssueId) {
+          storyAssigneeCache.set(String(storyIssueId), assigneeInfo);
+        }
 
         // Parse sprint data from customfield_11002
         const sprintData = issue.fields?.customfield_11002;
@@ -731,6 +775,9 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
         statistics.processing.badgesInjected++;
       }
     }
+
+    // Process story avatars now that we have fresh data
+    processStories();
 
     const apiEndTime = performance.now();
     if (currentSettings.debug.logApiRequests) {
@@ -849,7 +896,7 @@ export function setupObserver(debounceMs: number = 500): MutationObserver {
           if (node.nodeType === Node.ELEMENT_NODE) {
             const element = node as HTMLElement;
             // If any added node is NOT a badge, we should process
-            if (!element.classList.contains(BADGE_CLASS) && !element.classList.contains(TIMELINE_BADGE_CLASS)) {
+            if (!element.classList.contains(BADGE_CLASS) && !element.classList.contains(TIMELINE_BADGE_CLASS) && !element.classList.contains(STORY_AVATAR_CLASS)) {
               isBadgeInsertion = false;
               break;
             }
@@ -864,7 +911,7 @@ export function setupObserver(debounceMs: number = 500): MutationObserver {
       if (mutation.type === 'attributes') {
         const target = mutation.target as HTMLElement;
         // CRITICAL: Ignore badge attribute changes
-        if (target.classList.contains(BADGE_CLASS) || target.classList.contains(TIMELINE_BADGE_CLASS)) {
+        if (target.classList.contains(BADGE_CLASS) || target.classList.contains(TIMELINE_BADGE_CLASS) || target.classList.contains(STORY_AVATAR_CLASS)) {
           continue;
         }
         // Watch for real Jira Plans attributes
@@ -1102,6 +1149,7 @@ export function __test_clearCache__(): void {
   assigneeCountCache.clear();
   inflightRequests.clear();
   sprintLayoutCache.clear();
+  storyAssigneeCache.clear();
   statistics.cache.totalEntries = 0;
   statistics.cache.hitCount = 0;
   statistics.cache.missCount = 0;

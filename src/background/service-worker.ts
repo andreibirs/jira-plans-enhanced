@@ -234,10 +234,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
  * Listen to tab activation to update icon state
  */
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  console.log(`[Tab Activated] TabId: ${activeInfo.tabId}`);
-  const tab = await chrome.tabs.get(activeInfo.tabId);
-  if (tab.url) {
-    await updateIconForTab(activeInfo.tabId, tab.url);
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab.url) {
+      await updateIconForTab(activeInfo.tabId, tab.url);
+    }
+  } catch {
+    // Tab was closed between activation event and get() call - safe to ignore
   }
 });
 

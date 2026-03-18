@@ -12,6 +12,7 @@ export interface ExtensionSettings {
     showSprintSpecificBadges: boolean;
     showZeroCountBadges: boolean;
     showLoadingState: boolean;
+    showStoryAvatars: boolean;
   };
   appearance: {
     badgeDisplayMode: 'count' | 'avatars';
@@ -57,6 +58,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     showSprintSpecificBadges: true,
     showZeroCountBadges: false,
     showLoadingState: true,
+    showStoryAvatars: true,
   },
   appearance: {
     badgeDisplayMode: 'count',
