@@ -420,13 +420,9 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
     const totalAssignees = Array.from(uniqueAssigneeMap.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName)
     );
-    // Get avatar display options from settings
-    const displayMode = currentSettings.appearance.badgeDisplayMode;
-    const avatarSize = currentSettings.appearance.avatarSize === 'small' ? 16 :
-                       currentSettings.appearance.avatarSize === 'large' ? 24 : 20;
+    const displayMode = currentSettings.appearance.badgeDisplayMode || 'count';
     const avatarOptions = {
-      maxVisible: currentSettings.appearance.maxVisibleAvatars,
-      size: avatarSize,
+      maxVisible: currentSettings.appearance.maxVisibleAvatars || 4,
     };
     injectTimelineBadge(issueId, totalCount, totalAssignees, displayMode, avatarOptions);
     return;
@@ -448,7 +444,11 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
         positionPercent: 50,
         assignees,
       }];
-      injectSprintBadges(issueId, sprintBadgeData, unscheduledStories);
+      const displayMode = currentSettings.appearance.badgeDisplayMode || 'count';
+      const avatarOptions = {
+        maxVisible: currentSettings.appearance.maxVisibleAvatars || 4,
+      };
+      injectSprintBadges(issueId, sprintBadgeData, unscheduledStories, displayMode, avatarOptions);
     } else {
       // No unscheduled stories - show regular single badge centered
       clearTimelineBadges(issueId);
@@ -464,13 +464,9 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
       const totalAssignees = Array.from(uniqueAssigneeMap.values()).sort((a, b) =>
         a.displayName.localeCompare(b.displayName)
       );
-      // Get avatar display options from settings
       const displayMode = currentSettings.appearance.badgeDisplayMode;
-      const avatarSize = currentSettings.appearance.avatarSize === 'small' ? 16 :
-                         currentSettings.appearance.avatarSize === 'large' ? 24 : 20;
       const avatarOptions = {
         maxVisible: currentSettings.appearance.maxVisibleAvatars,
-        size: avatarSize,
       };
       injectTimelineBadge(issueId, totalCount, totalAssignees, displayMode, avatarOptions);
     }
@@ -556,7 +552,11 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
 
   // Inject all sprint badges
   if (sprintBadgeData.length > 0) {
-    injectSprintBadges(issueId, sprintBadgeData, unscheduledStories);
+    const displayMode = currentSettings.appearance.badgeDisplayMode || 'count';
+    const avatarOptions = {
+      maxVisible: currentSettings.appearance.maxVisibleAvatars || 4,
+    };
+    injectSprintBadges(issueId, sprintBadgeData, unscheduledStories, displayMode, avatarOptions);
   }
 }
 
@@ -631,10 +631,13 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       const assignee = issue.fields?.assignee;
       const issueKey = issue.key;
 
-      if (assignee && assignee.accountId) {
+      // Support both Jira Cloud (accountId) and Jira Server/Data Center (name/key)
+      const userId = assignee?.accountId || assignee?.name || assignee?.key;
+
+      if (assignee && userId) {
         // Extract assignee info
         const assigneeInfo: AssigneeInfo = {
-          accountId: assignee.accountId,
+          accountId: userId, // Use accountId, name, or key as identifier
           displayName: assignee.displayName || 'Unknown',
           avatarUrls: {
             '16x16': assignee.avatarUrls?.['16x16'] || '',
@@ -645,14 +648,14 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
           emailAddress: assignee.emailAddress,
         };
 
-        uniqueAssignees.set(assignee.accountId, assigneeInfo);
+        uniqueAssignees.set(userId, assigneeInfo);
 
         // Parse sprint data from customfield_11002
         const sprintData = issue.fields?.customfield_11002;
 
         if (!sprintData || !Array.isArray(sprintData) || sprintData.length === 0) {
           // Story has assignee but NO sprint assignment
-          assigneesWithoutSprint.set(assignee.accountId, assigneeInfo);
+          assigneesWithoutSprint.set(userId, assigneeInfo);
           if (issueKey) {
             unscheduledStories.push(issueKey);
           }
@@ -666,7 +669,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
               if (!assigneesBySprint.has(normalizedName)) {
                 assigneesBySprint.set(normalizedName, new Map());
               }
-              assigneesBySprint.get(normalizedName)!.set(assignee.accountId, assigneeInfo);
+              assigneesBySprint.get(normalizedName)!.set(userId, assigneeInfo);
             }
           }
         }
@@ -1008,6 +1011,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
  */
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'sync' && changes[SETTINGS_STORAGE_KEY]) {
+    const oldSettings = changes[SETTINGS_STORAGE_KEY].oldValue as Partial<ExtensionSettings> | undefined;
     const newSettings = changes[SETTINGS_STORAGE_KEY].newValue as Partial<ExtensionSettings>;
     currentSettings = mergeWithDefaults(newSettings);
 
@@ -1015,11 +1019,19 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       console.log('[Headcount] Settings updated:', currentSettings);
     }
 
-    // Apply display settings immediately to existing badges
-    applyDisplaySettings();
+    // Check if displayMode changed - if so, clear all badges and re-inject
+    const oldDisplayMode = oldSettings?.appearance?.badgeDisplayMode;
+    const newDisplayMode = newSettings.appearance?.badgeDisplayMode;
 
-    // Re-process epics to apply other settings (performance, filters, etc.)
-    processEpics();
+    if (oldDisplayMode && newDisplayMode && oldDisplayMode !== newDisplayMode) {
+      // Display mode changed - clear all badges and re-inject with new mode
+      clearAllBadges();
+      processEpics();
+    } else {
+      // Display mode unchanged - just apply visibility settings to existing badges
+      applyDisplaySettings();
+      processEpics();
+    }
   }
 });
 

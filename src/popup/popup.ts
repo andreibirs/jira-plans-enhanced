@@ -459,9 +459,7 @@ async function activateExtension(): Promise<void> {
       return;
     }
 
-    // Service worker will auto-inject via chrome.permissions.onAdded event
-    // This code may or may not run depending on if popup stayed open
-
+    // Service worker's chrome.permissions.onAdded listener will handle injection
     activationInProgress = false;
   } catch (error) {
     console.error('[Popup] Activation failed:', error);
@@ -531,13 +529,11 @@ function applySettingsToUI(): void {
   const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
   const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
   const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
-  const avatarSize = document.getElementById('avatarSize') as HTMLSelectElement;
   const avatarSettings = document.getElementById('avatarSettings');
 
   if (badgeDisplayMode) badgeDisplayMode.value = currentSettings.appearance.badgeDisplayMode;
   if (maxVisibleAvatars) maxVisibleAvatars.value = String(currentSettings.appearance.maxVisibleAvatars);
   if (maxVisibleAvatarsValue) maxVisibleAvatarsValue.textContent = String(currentSettings.appearance.maxVisibleAvatars);
-  if (avatarSize) avatarSize.value = currentSettings.appearance.avatarSize;
 
   // Show/hide avatar settings based on display mode
   if (avatarSettings) {
@@ -605,11 +601,10 @@ function setupEventListeners(): void {
   const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
   const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
   const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
-  const avatarSize = document.getElementById('avatarSize') as HTMLSelectElement;
   const avatarSettings = document.getElementById('avatarSettings');
 
   badgeDisplayMode?.addEventListener('change', () => {
-    currentSettings.appearance.badgeDisplayMode = badgeDisplayMode.value as 'count' | 'avatars' | 'hybrid';
+    currentSettings.appearance.badgeDisplayMode = badgeDisplayMode.value as 'count' | 'avatars';
 
     // Show/hide avatar-specific settings
     if (avatarSettings) {
@@ -627,11 +622,6 @@ function setupEventListeners(): void {
       maxVisibleAvatarsValue.textContent = String(value);
     }
 
-    saveSettings();
-  });
-
-  avatarSize?.addEventListener('change', () => {
-    currentSettings.appearance.avatarSize = avatarSize.value as 'small' | 'normal' | 'large';
     saveSettings();
   });
 

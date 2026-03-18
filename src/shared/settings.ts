@@ -14,9 +14,8 @@ export interface ExtensionSettings {
     showLoadingState: boolean;
   };
   appearance: {
-    badgeDisplayMode: 'count' | 'avatars' | 'hybrid';  // NEW: Avatar display mode
-    maxVisibleAvatars: number;                          // NEW: 2-8, default 4
-    avatarSize: 'small' | 'normal' | 'large';          // NEW: Avatar circle size
+    badgeDisplayMode: 'count' | 'avatars';
+    maxVisibleAvatars: number; // 2-8, default 4
     badgeTheme: 'auto' | 'light' | 'dark' | 'custom';
     leftPanelBadgeSize: 'small' | 'normal' | 'large';
     timelineBadgeSize: 'small' | 'normal' | 'large';
@@ -60,9 +59,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     showLoadingState: true,
   },
   appearance: {
-    badgeDisplayMode: 'avatars',      // NEW: Default to avatar mode
-    maxVisibleAvatars: 4,              // NEW: Show up to 4 avatars
-    avatarSize: 'normal',              // NEW: Normal size avatars (24px)
+    badgeDisplayMode: 'count',
+    maxVisibleAvatars: 4,
     badgeTheme: 'auto',
     leftPanelBadgeSize: 'normal',
     timelineBadgeSize: 'normal',

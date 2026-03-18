@@ -197,8 +197,8 @@ export function removeBadge(epicRow: HTMLElement, epicKey?: string): boolean {
 export function createTimelineBadge(
   count: number,
   assignees?: AssigneeInfo[],
-  displayMode: 'count' | 'avatars' | 'hybrid' = 'count',
-  avatarOptions?: { maxVisible?: number; size?: number }
+  displayMode: 'count' | 'avatars' = 'count',
+  avatarOptions?: { maxVisible?: number }
 ): HTMLSpanElement {
   const badge = document.createElement('span');
   badge.className = TIMELINE_BADGE_CLASS;
@@ -232,7 +232,7 @@ export function createTimelineBadge(
       color: #fff;
       display: inline-block;
       pointer-events: auto;
-      z-index: 100;
+      z-index: 2;
       min-width: 18px;
       cursor: help;
       text-align: center;
@@ -241,8 +241,6 @@ export function createTimelineBadge(
     return badge;
   }
 
-  // Determine avatar size based on avatarOptions or use default
-  const avatarSize = avatarOptions?.size || 20;  // Timeline avatars are smaller
   const maxVisible = avatarOptions?.maxVisible || 4;
 
   // Create badge content based on display mode
@@ -250,71 +248,24 @@ export function createTimelineBadge(
     // Avatar mode: show profile pictures
     const avatarBadge = createAvatarBadge(assignees, {
       maxVisible,
-      size: avatarSize,
+      size: 16,
       overlap: 6,
       showTooltip: true,
     });
 
-    // Wrap avatar badge in positioned container
     badge.style.cssText = `
       position: absolute;
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
       pointer-events: auto;
-      z-index: 100;
+      z-index: 2;
       display: flex;
       align-items: center;
       justify-content: center;
     `;
 
     badge.appendChild(avatarBadge);
-  } else if (displayMode === 'hybrid' && assignees && assignees.length > 0) {
-    // Hybrid mode: show both avatars and count
-    const container = document.createElement('div');
-    container.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    `;
-
-    const avatarBadge = createAvatarBadge(assignees, {
-      maxVisible: Math.min(maxVisible, 3),  // Show fewer in hybrid mode
-      size: avatarSize,
-      overlap: 4,
-      showTooltip: false,  // Tooltip on container instead
-    });
-
-    const countBadge = document.createElement('span');
-    countBadge.textContent = `${count}`;
-    countBadge.style.cssText = `
-      padding: 2px 6px;
-      background-color: rgba(0, 0, 0, 0.6);
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: bold;
-      color: #fff;
-      min-width: 18px;
-      text-align: center;
-    `;
-
-    container.appendChild(avatarBadge);
-    container.appendChild(countBadge);
-
-    badge.style.cssText = `
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: auto;
-      z-index: 100;
-    `;
-
-    const engineersText = `${count} unique ${count === 1 ? 'engineer' : 'engineers'}`;
-    const assigneesList = assignees.map(a => a.displayName).join(', ');
-    badge.title = `Total: ${engineersText}\n\nEngineers: ${assigneesList}`;
-
-    badge.appendChild(container);
   } else {
     // Count mode (default): show numeric badge
     badge.textContent = `${count}`;
@@ -340,7 +291,7 @@ export function createTimelineBadge(
       color: #fff;
       display: inline-block;
       pointer-events: auto;
-      z-index: 100;
+      z-index: 2;
       min-width: 18px;
       cursor: help;
       text-align: center;
@@ -363,7 +314,7 @@ export function injectTimelineBadge(
   issueId: string,
   count: number,
   assignees?: AssigneeInfo[],
-  displayMode: 'count' | 'avatars' | 'hybrid' = 'count',
+  displayMode: 'count' | 'avatars' = 'count',
   avatarOptions?: { maxVisible?: number; size?: number }
 ): boolean {
   // Find timeline bar by data-name pattern
@@ -470,7 +421,15 @@ export function updateTimelineBadge(issueId: string, count: number, assignees?: 
  * @param sprintName - Sprint name for tooltip
  * @param positionPercent - Position as percentage of bar width (0-100)
  */
-export function createSprintBadge(count: number, sprintName: string, positionPercent: number, unscheduledStories?: string[], assignees?: AssigneeInfo[]): HTMLSpanElement {
+export function createSprintBadge(
+  count: number,
+  sprintName: string,
+  positionPercent: number,
+  unscheduledStories?: string[],
+  assignees?: AssigneeInfo[],
+  displayMode: 'count' | 'avatars' = 'count',
+  avatarOptions?: { maxVisible?: number }
+): HTMLSpanElement {
   const badge = document.createElement('span');
   badge.className = TIMELINE_BADGE_CLASS;
   badge.setAttribute('data-sprint', sprintName);
@@ -483,62 +442,109 @@ export function createSprintBadge(count: number, sprintName: string, positionPer
   // Check if this is the special "no sprint" badge
   const isNoSprint = sprintName === '__NO_SPRINT__';
 
-  if (count === -1) {
-    badge.textContent = '...';
-    badge.title = isNoSprint ? 'Stories not assigned to sprints: Loading...' : `${sprintName}: Loading...`;
-  } else if (count === 0) {
-    badge.textContent = isNoSprint ? '⚠ 0' : '0';
-    badge.title = isNoSprint ? 'Stories not assigned to sprints: No assignees' : `${sprintName}: No assignees`;
-  } else {
-    badge.textContent = isNoSprint ? `⚠ ${count}` : `${count}`;
-    const engineersText = `${count} unique ${count === 1 ? 'engineer' : 'engineers'}`;
-
-    if (isNoSprint && unscheduledStories && unscheduledStories.length > 0) {
-      // Include story keys in tooltip for warning badge
-      const storiesList = unscheduledStories.join(', ');
-      const assigneesList = assignees && assignees.length > 0 ? `\n\nEngineers: ${assignees.map(a => a.displayName).join(', ')}` : '';
-      badge.title = `⚠ Stories not assigned to sprints: ${engineersText}${assigneesList}\n\nUnscheduled stories: ${storiesList}`;
-    } else if (assignees && assignees.length > 0) {
-      // Include engineer names in tooltip for regular badges
-      const assigneesList = assignees.map(a => a.displayName).join(', ');
-      badge.title = isNoSprint
-        ? `⚠ Stories not assigned to sprints: ${engineersText}\n\nEngineers: ${assigneesList}`
-        : `${sprintName}: ${engineersText}\n\nEngineers: ${assigneesList}`;
+  //  Handle loading and zero states (always show as numeric)
+  if (count === -1 || count === 0) {
+    if (count === -1) {
+      badge.textContent = '...';
+      badge.title = isNoSprint ? 'Stories not assigned to sprints: Loading...' : `${sprintName}: Loading...`;
     } else {
-      badge.title = isNoSprint ? `⚠ Stories not assigned to sprints: ${engineersText}` : `${sprintName}: ${engineersText}`;
+      badge.textContent = isNoSprint ? '⚠ 0' : '0';
+      badge.title = isNoSprint ? 'Stories not assigned to sprints: No assignees' : `${sprintName}: No assignees`;
     }
+
+    // Use orange/warning color for no-sprint badges
+    const backgroundColor = isNoSprint ? 'rgba(255, 152, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)';
+
+    badge.style.cssText = `
+      position: absolute;
+      left: ${positionPercent}%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 2px 6px;
+      background-color: ${backgroundColor};
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #fff;
+      display: inline-block;
+      pointer-events: auto;
+      z-index: ${isNoSprint ? 3 : 2};
+      min-width: ${isNoSprint ? '24px' : '18px'};
+      text-align: center;
+    `;
+
+    return badge;
+  }
+
+  const maxVisible = avatarOptions?.maxVisible || 4;
+  const engineersText = `${count} unique ${count === 1 ? 'engineer' : 'engineers'}`;
+
+  // Build tooltip text
+  let tooltipText = '';
+  if (isNoSprint && unscheduledStories && unscheduledStories.length > 0) {
+    const storiesList = unscheduledStories.join(', ');
+    const assigneesList = assignees && assignees.length > 0 ? `\n\nEngineers: ${assignees.map(a => a.displayName).join(', ')}` : '';
+    tooltipText = `⚠ Stories not assigned to sprints: ${engineersText}${assigneesList}\n\nUnscheduled stories: ${storiesList}`;
+  } else if (assignees && assignees.length > 0) {
+    const assigneesList = assignees.map(a => a.displayName).join(', ');
+    tooltipText = isNoSprint
+      ? `⚠ Stories not assigned to sprints: ${engineersText}\n\nEngineers: ${assigneesList}`
+      : `${sprintName}: ${engineersText}\n\nEngineers: ${assigneesList}`;
+  } else {
+    tooltipText = isNoSprint ? `⚠ Stories not assigned to sprints: ${engineersText}` : `${sprintName}: ${engineersText}`;
   }
 
   // Use orange/warning color for no-sprint badges
   const backgroundColor = isNoSprint ? 'rgba(255, 152, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)';
 
-  // Position badge at specific percentage of bar width
-  // Use transform to center badge on the calculated position
-  // Positioned at bottom of bar to avoid overlap with sprint labels and other UI elements
-  // z-index: Moderate value, badges appear below other UI elements by design
-  // Warning badges get slightly higher z-index to stand out
-  // Add min-width to ensure entire badge is hoverable
-  badge.style.cssText = `
-    position: absolute;
-    left: ${positionPercent}%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    padding: 2px 6px;
-    background-color: ${backgroundColor};
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: bold;
-    color: #fff;
-    display: inline-block;
-    pointer-events: auto;
-    z-index: ${isNoSprint ? 150 : 100};
-    min-width: ${isNoSprint ? '24px' : '18px'};
-    height: auto;
-    margin: 0;
-    cursor: help;
-    text-align: center;
-    box-sizing: border-box;
-  `;
+  // Create badge content based on display mode (but always show warning badges as count+icon)
+  if (!isNoSprint && displayMode === 'avatars' && assignees && assignees.length > 0) {
+    // Avatar mode: show profile pictures
+    const avatarBadge = createAvatarBadge(assignees, {
+      maxVisible,
+      size: 16,
+      overlap: 6,
+      showTooltip: false,
+    });
+
+    badge.style.cssText = `
+      position: absolute;
+      left: ${positionPercent}%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    `;
+
+    badge.appendChild(avatarBadge);
+    badge.title = tooltipText;
+  } else {
+    // Count mode (default) or warning badge: show numeric badge
+    badge.textContent = isNoSprint ? `⚠ ${count}` : `${count}`;
+    badge.title = tooltipText;
+
+    badge.style.cssText = `
+      position: absolute;
+      left: ${positionPercent}%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 2px 6px;
+      background-color: ${backgroundColor};
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #fff;
+      display: inline-block;
+      pointer-events: auto;
+      z-index: ${isNoSprint ? 3 : 2};
+      min-width: ${isNoSprint ? '24px' : '18px'};
+      cursor: help;
+      text-align: center;
+    `;
+  }
 
   return badge;
 }
@@ -589,7 +595,9 @@ export function clearTimelineBadges(issueId: string): void {
 export function injectSprintBadges(
   issueId: string,
   sprintData: Array<{ sprintName: string; count: number; positionPercent: number; assignees: AssigneeInfo[] }>,
-  unscheduledStories?: string[]
+  unscheduledStories?: string[],
+  displayMode: 'count' | 'avatars' = 'count',
+  avatarOptions?: { maxVisible?: number }
 ): boolean {
   // Find timeline bar by data-name pattern
   let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
@@ -626,7 +634,7 @@ export function injectSprintBadges(
 
   // Add new badges for each sprint
   for (const { sprintName, count, positionPercent, assignees } of sprintData) {
-    const badge = createSprintBadge(count, sprintName, positionPercent, unscheduledStories, assignees);
+    const badge = createSprintBadge(count, sprintName, positionPercent, unscheduledStories, assignees, displayMode, avatarOptions);
     timelineBar.appendChild(badge);
   }
 

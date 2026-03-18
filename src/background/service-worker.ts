@@ -260,30 +260,48 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
  * Listen for permission grants and auto-inject into existing tabs
  */
 chrome.permissions.onAdded.addListener(async (permissions) => {
-  console.log('[Service Worker] Permissions granted:', permissions.origins);
+  console.log('[Permission Added] Event fired!');
+  console.log('[Permission Added] Full permissions object:', JSON.stringify(permissions));
+  console.log('[Permission Added] Origins:', permissions.origins);
 
   if (!permissions.origins || permissions.origins.length === 0) {
+    console.log('[Permission Added] No origins in permissions, exiting');
     return;
   }
 
   // For each newly granted origin, check if it's in our allowlist and inject
   const domains = await loadAllowlistedDomains();
+  console.log('[Permission Added] Current allowlist:', JSON.stringify(domains));
 
   for (const origin of permissions.origins) {
+    console.log('[Permission Added] Processing origin:', origin);
+
     // Extract domain from origin pattern (e.g., "*://example.com/*" -> "example.com")
     const domainMatch = origin.match(/\/\/([^/]+)\//);
-    if (!domainMatch) continue;
+    console.log('[Permission Added] Domain regex match:', domainMatch);
+
+    if (!domainMatch) {
+      console.log('[Permission Added] Failed to extract domain from:', origin);
+      continue;
+    }
 
     const domain = domainMatch[1];
+    console.log('[Permission Added] Extracted domain:', domain);
 
     // Find matching domain in allowlist
     const domainInfo = domains.find(d => d.domain === domain);
+    console.log('[Permission Added] Found in allowlist:', !!domainInfo);
+
     if (domainInfo) {
-      console.log(`[Service Worker] Auto-injecting for ${domain}...`);
+      console.log(`[Permission Added] Registering content script for ${domain}...`);
       const injectedCount = await registerContentScriptForDomain(domainInfo.domain, domainInfo.pattern);
-      console.log(`[Service Worker] Injected into ${injectedCount} tab(s)`);
+      console.log(`[Permission Added] Successfully injected into ${injectedCount} tab(s)`);
+    } else {
+      console.log(`[Permission Added] Domain ${domain} not in allowlist, skipping`);
     }
   }
+
+  console.log('[Permission Added] Event processing complete');
 });
 
 /**

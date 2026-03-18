@@ -37,9 +37,9 @@ export function createAvatarBadge(
   const container = document.createElement('div');
   container.className = 'jira-plans-avatar-badge';
   container.style.cssText = `
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    margin-left: -${opts.overlap}px;
+    height: ${opts.size}px;
   `;
 
   const visible = assignees.slice(0, opts.maxVisible);
