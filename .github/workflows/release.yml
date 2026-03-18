@@ -87,11 +87,75 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to Chrome Web Store
-        uses: mnao305/chrome-extension-upload@v5.0.0
-        with:
-          file-path: jira-plans-enhanced.zip
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          publish: true
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          # Get access token
+          TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=$CLIENT_ID" \
+            -d "client_secret=$CLIENT_SECRET" \
+            -d "refresh_token=$REFRESH_TOKEN" \
+            -d "grant_type=refresh_token")
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "❌ Failed to get access token:"
+            echo "$TOKEN_RESPONSE" | jq .
+            exit 1
+          fi
+
+          # Check current item status
+          echo "Checking current extension status..."
+          STATUS_RESPONSE=$(curl -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$EXTENSION_ID?projection=DRAFT")
+          UPLOAD_STATE=$(echo "$STATUS_RESPONSE" | jq -r '.uploadState // "UNKNOWN"')
+          echo "Current upload state: $UPLOAD_STATE"
+
+          if [ "$UPLOAD_STATE" = "IN_REVIEW" ]; then
+            echo "⚠️ Extension is currently IN_REVIEW — skipping upload (will publish after review completes)"
+            exit 0
+          fi
+
+          # Upload new version
+          echo "Uploading new version..."
+          UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -X PUT \
+            -T jira-plans-enhanced.zip \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$EXTENSION_ID")
+          HTTP_STATUS=$(echo "$UPLOAD_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY=$(echo "$UPLOAD_RESPONSE" | sed '/HTTP_STATUS:/d')
+          echo "Upload response ($HTTP_STATUS):"
+          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+
+          UPLOAD_STATE=$(echo "$BODY" | jq -r '.uploadState // "UNKNOWN"')
+          if [ "$UPLOAD_STATE" != "SUCCESS" ]; then
+            echo "❌ Upload failed with state: $UPLOAD_STATE"
+            echo "$BODY" | jq -r '.itemError[]?.error_detail // empty' 2>/dev/null
+            exit 1
+          fi
+
+          # Publish
+          echo "Publishing..."
+          PUBLISH_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            -X POST \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$EXTENSION_ID/publish")
+          HTTP_STATUS=$(echo "$PUBLISH_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY=$(echo "$PUBLISH_RESPONSE" | sed '/HTTP_STATUS:/d')
+          echo "Publish response ($HTTP_STATUS):"
+          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+
+          STATUS=$(echo "$BODY" | jq -r '.status[0] // "UNKNOWN"')
+          if [ "$STATUS" != "OK" ] && [ "$STATUS" != "PUBLISHED_WITH_FRICTION_WARNING" ]; then
+            echo "❌ Publish failed with status: $STATUS"
+            exit 1
+          fi
+          echo "✅ Published successfully"
