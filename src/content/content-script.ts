@@ -9,7 +9,7 @@
  */
 
 import { findEpicRows, findStoryRows, extractEpicData } from './dom-parser';
-import { injectSprintBadges, injectTimelineBadge, injectBadge, updateBadge, countBadges, clearAllBadges, clearTimelineBadges, injectStoryAvatar, injectStoryPwBadge, BADGE_CLASS, TIMELINE_BADGE_CLASS, STORY_AVATAR_CLASS } from './badge';
+import { injectSprintBadges, injectTimelineBadge, injectBadge, updateBadge, countBadges, clearAllBadges, clearTimelineBadges, clearAllStoryAvatars, injectStoryAvatar, injectStoryPwBadge, BADGE_CLASS, TIMELINE_BADGE_CLASS, STORY_AVATAR_CLASS } from './badge';
 import { getSprintLayout, getOverlappingSprints, calculateBadgePosition, SprintSegment, normalizeSprintName } from './sprint-layout';
 import { ExtensionSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, mergeWithDefaults } from '../shared/settings';
 import { ExtensionStatistics, INITIAL_STATISTICS, calculateHitRate } from '../shared/statistics';
@@ -21,6 +21,12 @@ export interface ProcessResult {
   injected: number;
 }
 
+// Effort per person per sprint — tracks SP and PD separately for correct threshold application
+interface PersonEffort {
+  sp: number;
+  pd: number;
+}
+
 // Cache for API results — keyed by epicKey (e.g., "PROJ-123")
 interface CachedAssigneeData {
   totalCount: number;
@@ -29,8 +35,8 @@ interface CachedAssigneeData {
   unscheduledStories?: string[];
   sprintAssignees: Map<string, AssigneeInfo[]>;
   totalAssignees: AssigneeInfo[];
-  spPerPersonPerSprint: Map<string, Map<string, number>>;       // last sprint per story → (userId → SP)
-  spPerPersonCurrentSprints: Map<string, Map<string, number>>;  // ACTIVE/FUTURE sprint → (userId → SP)
+  effortPerPersonPerSprint: Map<string, Map<string, PersonEffort>>;       // last sprint → (userId → effort)
+  effortPerPersonCurrentSprints: Map<string, Map<string, PersonEffort>>;  // ACTIVE/FUTURE → (userId → effort)
   estimatedStoryCount: number;
   totalStoryCount: number;
 }
@@ -48,7 +54,8 @@ const storyAssigneeCache = new Map<string, AssigneeInfo>();
 
 // Per-story PW detail — references into epic cache for dynamic threshold recomputation
 interface StoryPwDetail {
-  sp: number;
+  effort: number;           // SP value or person-days
+  effortUnit: 'sp' | 'pd'; // Which field the effort came from
   userId: string;
   epicKey: string;
   lastSprint: string;
@@ -285,33 +292,44 @@ function buildPwOverride(cachedData: CachedAssigneeData): { text: string; toolti
 }
 
 /**
- * Convert story points to person-weeks
- * ≤threshold SP = 1 PW (up to a week of work)
- * >threshold SP = 2 PW (full sprint / two weeks)
- * No SP = 0 PW (skip)
+ * Convert effort to person-weeks using the appropriate threshold
+ * SP uses spThresholdPerPw, person-days uses pdThresholdPerPw
+ * ≤threshold = 1 PW, >threshold = 2 PW, no effort = 0 PW
  */
-function storyPointsToPersonWeeks(storyPoints: number | null | undefined): number {
-  if (!storyPoints || storyPoints <= 0) return 0;
-  const threshold = currentSettings.appearance.spThresholdPerPw;
-  return storyPoints <= threshold ? 1 : 2;
+function effortToPersonWeeks(effort: number | null | undefined, unit: 'sp' | 'pd' = 'sp'): number {
+  if (!effort || effort <= 0) return 0;
+  const threshold = unit === 'pd'
+    ? currentSettings.appearance.pdThresholdPerPw
+    : currentSettings.appearance.spThresholdPerPw;
+  return effort <= threshold ? 1 : 2;
 }
 
 /**
- * Compute person-weeks from cached per-person-per-sprint SP data
+ * Convert a PersonEffort to PW — uses whichever field is populated (SP preferred over PD)
+ * A person can only contribute max 2 PW per sprint regardless of mixed sources
+ */
+function personEffortToPw(effort: PersonEffort): number {
+  const spPw = effortToPersonWeeks(effort.sp, 'sp');
+  const pdPw = effortToPersonWeeks(effort.pd, 'pd');
+  return Math.min(Math.max(spPw, pdPw), 2);
+}
+
+/**
+ * Compute person-weeks from cached per-person-per-sprint effort data
  * Returns total PW (all sprints) and remaining PW (active/future only)
- * Uses current threshold setting so changes are reflected immediately
+ * Uses current threshold settings so changes are reflected immediately
  */
 function computePersonWeeks(cachedData: CachedAssigneeData): { total: number; remaining: number } {
   let total = 0;
-  for (const spPerPerson of cachedData.spPerPersonPerSprint.values()) {
-    for (const sp of spPerPerson.values()) {
-      total += storyPointsToPersonWeeks(sp);
+  for (const effortPerPerson of cachedData.effortPerPersonPerSprint.values()) {
+    for (const effort of effortPerPerson.values()) {
+      total += personEffortToPw(effort);
     }
   }
   let remaining = 0;
-  for (const spPerPerson of cachedData.spPerPersonCurrentSprints.values()) {
-    for (const sp of spPerPerson.values()) {
-      remaining += storyPointsToPersonWeeks(sp);
+  for (const effortPerPerson of cachedData.effortPerPersonCurrentSprints.values()) {
+    for (const effort of effortPerPerson.values()) {
+      remaining += personEffortToPw(effort);
     }
   }
   return { total, remaining };
@@ -477,11 +495,11 @@ function processStories(): void {
         if (detail === null) {
           injectStoryPwBadge(issueId, null);
         } else {
-          // Compute person's PW dynamically using current threshold and per-sprint SP (last sprint)
+          // Compute person's PW dynamically using current threshold and per-sprint effort (last sprint)
           const cachedEpic = assigneeCountCache.get(detail.epicKey);
-          const personSprintSp = cachedEpic?.spPerPersonPerSprint?.get(detail.lastSprint)?.get(detail.userId) || 0;
-          const personPw = storyPointsToPersonWeeks(personSprintSp);
-          injectStoryPwBadge(issueId, { sp: detail.sp, personPw });
+          const personEffort = cachedEpic?.effortPerPersonPerSprint?.get(detail.lastSprint)?.get(detail.userId);
+          const personPw = personEffort ? personEffortToPw(personEffort) : 0;
+          injectStoryPwBadge(issueId, { effort: detail.effort, effortUnit: detail.effortUnit, personPw });
         }
       }
     } else {
@@ -777,7 +795,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     // Request sprint field along with assignee
     // customfield_11002 is commonly used for sprints, but this may vary by Jira instance
     const maxResults = currentSettings.performance.apiMaxResults;
-    const url = `${JIRA_BASE_URL}/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=assignee,customfield_11002,customfield_10003&maxResults=${maxResults}`;
+    const url = `${JIRA_BASE_URL}/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=assignee,customfield_11002,customfield_10003,timeestimate&maxResults=${maxResults}`;
 
     if (currentSettings.debug.logApiRequests) {
       console.log(`[Headcount] API request: ${epicKey}`);
@@ -810,9 +828,9 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     let estimatedStoryCount = 0;
     const totalStoryCount = issues.length;
 
-    // SP per person per sprint — two maps for total vs remaining PW
-    const spPerPersonPerSprint = new Map<string, Map<string, number>>();
-    const spPerPersonCurrentSprints = new Map<string, Map<string, number>>();
+    // Effort per person per sprint — two maps for total vs remaining PW
+    const effortPerPersonPerSprint = new Map<string, Map<string, PersonEffort>>();
+    const effortPerPersonCurrentSprints = new Map<string, Map<string, PersonEffort>>();
 
     // Group assignees by sprint
     const assigneesBySprint = new Map<string, Map<string, AssigneeInfo>>();
@@ -822,16 +840,23 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     const unscheduledStories: string[] = [];
 
     // Track story details for second pass (to set person's PW after totals are known)
-    const storyDetails: Array<{ issueId: string; sp: number | null; userId: string | undefined; lastSprint: string; currentSprint: string }> = [];
+    const storyDetails: Array<{ issueId: string; effort: number; effortUnit: 'sp' | 'pd'; userId: string | undefined; lastSprint: string; currentSprint: string }> = [];
 
     for (const issue of issues) {
       const assignee = issue.fields?.assignee;
       const issueKey = issue.key;
       const storyIssueId = issue.id; // Numeric ID matching data-issue in DOM
       const storyPoints = issue.fields?.customfield_10003 as number | null;
+      const timeEstimateSec = issue.fields?.timeestimate as number | null;
+      const timeEstimateDays = timeEstimateSec ? timeEstimateSec / 28800 : null; // 8h = 28800s
+
+      // Determine effort: prefer SP, fall back to time estimate in person-days
+      const hasEffort = (storyPoints && storyPoints > 0) || (timeEstimateDays && timeEstimateDays > 0);
+      const effort = (storyPoints && storyPoints > 0) ? storyPoints : (timeEstimateDays || 0);
+      const effortUnit: 'sp' | 'pd' = (storyPoints && storyPoints > 0) ? 'sp' : 'pd';
 
       if (storyIssueId) {
-        if (storyPoints && storyPoints > 0) {
+        if (hasEffort) {
           estimatedStoryCount++;
         }
       }
@@ -859,7 +884,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       if (storyIssueId) {
         const lastSprint = storySprints.length > 0 ? storySprints[storySprints.length - 1] : '__UNSCHEDULED__';
         const currentSprint = currentSprints.length > 0 ? currentSprints[0] : '__UNSCHEDULED__';
-        storyDetails.push({ issueId: String(storyIssueId), sp: storyPoints, userId, lastSprint, currentSprint });
+        storyDetails.push({ issueId: String(storyIssueId), effort, effortUnit, userId, lastSprint, currentSprint });
       }
 
       if (assignee && userId) {
@@ -878,23 +903,27 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
 
         uniqueAssignees.set(userId, assigneeInfo);
 
-        // Accumulate SP per person per sprint for PW calculation
-        if (storyPoints && storyPoints > 0) {
+        // Accumulate effort per person per sprint for PW calculation
+        if (hasEffort) {
           const lastSprint = storySprints.length > 0 ? storySprints[storySprints.length - 1] : '__UNSCHEDULED__';
-          if (!spPerPersonPerSprint.has(lastSprint)) {
-            spPerPersonPerSprint.set(lastSprint, new Map());
+          if (!effortPerPersonPerSprint.has(lastSprint)) {
+            effortPerPersonPerSprint.set(lastSprint, new Map());
           }
-          const allMap = spPerPersonPerSprint.get(lastSprint)!;
-          allMap.set(userId, (allMap.get(userId) || 0) + storyPoints);
+          const allMap = effortPerPersonPerSprint.get(lastSprint)!;
+          const existing = allMap.get(userId) || { sp: 0, pd: 0 };
+          existing[effortUnit] += effort;
+          allMap.set(userId, existing);
 
           // ACTIVE/FUTURE only (remaining work)
           if (currentSprints.length > 0) {
             const activeSprint = currentSprints[0];
-            if (!spPerPersonCurrentSprints.has(activeSprint)) {
-              spPerPersonCurrentSprints.set(activeSprint, new Map());
+            if (!effortPerPersonCurrentSprints.has(activeSprint)) {
+              effortPerPersonCurrentSprints.set(activeSprint, new Map());
             }
-            const currentMap = spPerPersonCurrentSprints.get(activeSprint)!;
-            currentMap.set(userId, (currentMap.get(userId) || 0) + storyPoints);
+            const currentMap = effortPerPersonCurrentSprints.get(activeSprint)!;
+            const existingCurrent = currentMap.get(userId) || { sp: 0, pd: 0 };
+            existingCurrent[effortUnit] += effort;
+            currentMap.set(userId, existingCurrent);
           }
         }
 
@@ -923,9 +952,10 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
 
     // Populate story-level PW detail cache for dynamic threshold recomputation
     for (const detail of storyDetails) {
-      if (detail.sp && detail.sp > 0 && detail.userId) {
+      if (detail.effort > 0 && detail.userId) {
         storyPwDetailCache.set(detail.issueId, {
-          sp: detail.sp,
+          effort: detail.effort,
+          effortUnit: detail.effortUnit,
           userId: detail.userId,
           epicKey,
           lastSprint: detail.lastSprint,
@@ -967,8 +997,8 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       totalAssignees: Array.from(uniqueAssignees.values()).sort((a, b) =>
         a.displayName.localeCompare(b.displayName)
       ),
-      spPerPersonPerSprint,
-      spPerPersonCurrentSprints,
+      effortPerPersonPerSprint,
+      effortPerPersonCurrentSprints,
       estimatedStoryCount,
       totalStoryCount,
     });
@@ -1015,8 +1045,8 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       timestamp: Date.now(),
       sprintAssignees: new Map(),
       totalAssignees: [],
-      spPerPersonPerSprint: new Map(),
-      spPerPersonCurrentSprints: new Map(),
+      effortPerPersonPerSprint: new Map(),
+      effortPerPersonCurrentSprints: new Map(),
       estimatedStoryCount: 0,
       totalStoryCount: 0,
     });
@@ -1286,16 +1316,22 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       console.log('[Headcount] Settings updated:', currentSettings);
     }
 
-    // Check if displayMode changed - if so, clear all badges and re-inject
     const oldDisplayMode = oldSettings?.appearance?.badgeDisplayMode;
     const newDisplayMode = newSettings.appearance?.badgeDisplayMode;
+    const thresholdChanged =
+      oldSettings?.appearance?.spThresholdPerPw !== newSettings.appearance?.spThresholdPerPw ||
+      oldSettings?.appearance?.pdThresholdPerPw !== newSettings.appearance?.pdThresholdPerPw;
 
     if (oldDisplayMode && newDisplayMode && oldDisplayMode !== newDisplayMode) {
-      // Display mode changed - clear all badges and re-inject with new mode
+      // Display mode changed - clear everything and re-inject
       clearAllBadges();
       processEpics();
+    } else if (thresholdChanged) {
+      // Threshold changed - clear story badges so they re-inject with new PW values
+      clearAllStoryAvatars();
+      applyDisplaySettings();
+      processEpics();
     } else {
-      // Display mode unchanged - just apply visibility settings to existing badges
       applyDisplaySettings();
       processEpics();
     }
@@ -1358,8 +1394,8 @@ export function __test_populateCache__(epicKey: string, totalCount: number, assi
     timestamp: Date.now(),
     sprintAssignees: new Map(),
     totalAssignees: assignees,
-    spPerPersonPerSprint: new Map(),
-    spPerPersonCurrentSprints: new Map(),
+    effortPerPersonPerSprint: new Map(),
+    effortPerPersonCurrentSprints: new Map(),
     estimatedStoryCount: 0,
     totalStoryCount: 0,
   });

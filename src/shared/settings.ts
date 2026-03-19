@@ -17,6 +17,7 @@ export interface ExtensionSettings {
   appearance: {
     badgeDisplayMode: 'count' | 'avatars' | 'personweeks';
     spThresholdPerPw: number;  // SP ceiling for 1 PW, above = 2 PW (default 5)
+    pdThresholdPerPw: number;  // Person-days ceiling for 1 PW, above = 2 PW (default 4)
     maxVisibleAvatars: number; // 2-8, default 4
     badgeTheme: 'auto' | 'light' | 'dark' | 'custom';
     leftPanelBadgeSize: 'small' | 'normal' | 'large';
@@ -64,6 +65,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   appearance: {
     badgeDisplayMode: 'count',
     spThresholdPerPw: 5,
+    pdThresholdPerPw: 4,
     maxVisibleAvatars: 4,
     badgeTheme: 'auto',
     leftPanelBadgeSize: 'normal',

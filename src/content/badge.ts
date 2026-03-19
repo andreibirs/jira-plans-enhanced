@@ -737,10 +737,10 @@ export function injectStoryAvatar(issueId: string, assignee: AssigneeInfo): bool
 /**
  * Inject a person-weeks badge onto a story's timeline bar
  *
- * Shows "X SP (Y PW)" for estimated stories — SP is story's own, PW is the person's total.
- * Shows "⚠ No SP" in orange for stories without story points.
+ * Shows "X SP (Y PW)" or "Xd (Y PW)" for estimated stories.
+ * Shows "⚠ No estimate" in orange for stories without effort data.
  */
-export function injectStoryPwBadge(issueId: string, detail: { sp: number; personPw: number } | null): boolean {
+export function injectStoryPwBadge(issueId: string, detail: { effort: number; effortUnit: 'sp' | 'pd'; personPw: number } | null): boolean {
   // Find timeline bar for this story
   let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
 
@@ -779,17 +779,32 @@ export function injectStoryPwBadge(issueId: string, detail: { sp: number; person
   wrapper.setAttribute('data-issue-id', issueId);
 
   const badge = document.createElement('span');
-  badge.textContent = isUnestimated ? '⚠ No SP' : `${detail.sp} SP (${detail.personPw} PW)`;
-  badge.title = isUnestimated
-    ? 'This story has no story points assigned'
-    : `${detail.sp} story points — assignee totals ${detail.personPw} person-week${detail.personPw === 1 ? '' : 's'}`;
+  if (isUnestimated) {
+    badge.textContent = '⚠ No estimate';
+    badge.title = 'This story has no story points or time estimate';
+  } else {
+    const effortLabel = detail.effortUnit === 'pd'
+      ? `${detail.effort % 1 === 0 ? detail.effort : detail.effort.toFixed(1)}d`
+      : `${detail.effort} SP`;
+    const effortDesc = detail.effortUnit === 'pd' ? 'person-days' : 'story points';
+    badge.textContent = `${effortLabel} (${detail.personPw} PW)`;
+    badge.title = `${detail.effort} ${effortDesc} — assignee totals ${detail.personPw} person-week${detail.personPw === 1 ? '' : 's'}`;
+  }
 
   const bgColor = isUnestimated ? 'rgba(255, 152, 0, 0.85)' : 'rgba(100, 50, 150, 0.75)';
+  const barWidth = timelineBar.getBoundingClientRect().width;
+  const textLen = badge.textContent?.length || 0;
+  // ~6px per char at 9px font — scale down if badge would exceed bar width
+  const estimatedBadgeWidth = textLen * 6;
+  let fontSize = 9;
+  if (barWidth > 0 && estimatedBadgeWidth > barWidth) {
+    fontSize = Math.max(6, Math.floor(9 * barWidth / estimatedBadgeWidth));
+  }
   badge.style.cssText = `
-    padding: 1px 5px;
+    padding: 1px ${fontSize >= 8 ? 5 : 3}px;
     background-color: ${bgColor};
     border-radius: 3px;
-    font-size: 9px;
+    font-size: ${fontSize}px;
     font-weight: bold;
     color: #fff;
     white-space: nowrap;
@@ -798,10 +813,9 @@ export function injectStoryPwBadge(issueId: string, detail: { sp: number; person
 
   wrapper.style.cssText = `
     position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     justify-content: center;

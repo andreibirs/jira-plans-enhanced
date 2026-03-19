@@ -535,6 +535,8 @@ function applySettingsToUI(): void {
 
   const spThresholdPerPw = document.getElementById('spThresholdPerPw') as HTMLInputElement;
   const spThresholdPerPwValue = document.getElementById('spThresholdPerPwValue');
+  const pdThresholdPerPw = document.getElementById('pdThresholdPerPw') as HTMLInputElement;
+  const pdThresholdPerPwValue = document.getElementById('pdThresholdPerPwValue');
   const pwSettings = document.getElementById('pwSettings');
 
   if (badgeDisplayMode) badgeDisplayMode.value = currentSettings.appearance.badgeDisplayMode;
@@ -542,6 +544,8 @@ function applySettingsToUI(): void {
   if (maxVisibleAvatarsValue) maxVisibleAvatarsValue.textContent = String(currentSettings.appearance.maxVisibleAvatars);
   if (spThresholdPerPw) spThresholdPerPw.value = String(currentSettings.appearance.spThresholdPerPw);
   if (spThresholdPerPwValue) spThresholdPerPwValue.textContent = String(currentSettings.appearance.spThresholdPerPw);
+  if (pdThresholdPerPw) pdThresholdPerPw.value = String(currentSettings.appearance.pdThresholdPerPw);
+  if (pdThresholdPerPwValue) pdThresholdPerPwValue.textContent = String(currentSettings.appearance.pdThresholdPerPw);
 
   // Show/hide mode-specific settings
   if (avatarSettings) {
@@ -621,6 +625,8 @@ function setupEventListeners(): void {
   const avatarSettings = document.getElementById('avatarSettings');
   const spThresholdPerPw = document.getElementById('spThresholdPerPw') as HTMLInputElement;
   const spThresholdPerPwValue = document.getElementById('spThresholdPerPwValue');
+  const pdThresholdPerPw = document.getElementById('pdThresholdPerPw') as HTMLInputElement;
+  const pdThresholdPerPwValue = document.getElementById('pdThresholdPerPwValue');
   const pwSettings = document.getElementById('pwSettings');
 
   badgeDisplayMode?.addEventListener('change', () => {
@@ -654,6 +660,17 @@ function setupEventListeners(): void {
 
     if (spThresholdPerPwValue) {
       spThresholdPerPwValue.textContent = String(value);
+    }
+
+    saveSettings();
+  });
+
+  pdThresholdPerPw?.addEventListener('input', () => {
+    const value = parseInt(pdThresholdPerPw.value, 10);
+    currentSettings.appearance.pdThresholdPerPw = value;
+
+    if (pdThresholdPerPwValue) {
+      pdThresholdPerPwValue.textContent = String(value);
     }
 
     saveSettings();

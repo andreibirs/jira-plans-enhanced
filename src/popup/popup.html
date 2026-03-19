@@ -11,7 +11,7 @@
     <!-- Header -->
     <header class="popup-header">
       <h1>Jira Plans Enhanced</h1>
-      <div class="version">v0.6.0</div>
+      <div class="version">v0.6.1</div>
     </header>
 
     <!-- Inactive State: Clean activation screen -->
@@ -105,6 +105,15 @@
           <div class="slider-container">
             <input type="range" id="spThresholdPerPw" class="setting-slider" min="1" max="13" value="5">
             <span id="spThresholdPerPwValue" class="slider-value">5</span>
+          </div>
+        </div>
+
+        <!-- PD Threshold -->
+        <div class="setting-row">
+          <label for="pdThresholdPerPw" class="setting-label">Days Threshold (1 PW ≤)</label>
+          <div class="slider-container">
+            <input type="range" id="pdThresholdPerPw" class="setting-slider" min="1" max="10" value="4">
+            <span id="pdThresholdPerPwValue" class="slider-value">4</span>
           </div>
         </div>
 
