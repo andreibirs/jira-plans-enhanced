@@ -8,246 +8,246 @@
 </head>
 <body>
   <div class="popup-container">
+
     <!-- Header -->
     <header class="popup-header">
-      <h1>Jira Plans Enhanced</h1>
-      <div class="version">v0.6.1</div>
+      <div class="header-left">
+        <span class="header-mark">JP</span>
+        <h1 class="header-title">Plans Enhanced</h1>
+      </div>
+      <div class="header-right">
+        <div class="theme-switch" id="themeToggle" data-active="system">
+          <button class="theme-opt" data-theme="light" title="Light">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="3" fill="currentColor" opacity="0.15"/>
+              <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="theme-opt active" data-theme="system" title="Auto">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2.5" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M6 13.5h4M8 10.5v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="theme-opt" data-theme="dark" title="Dark">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M13.5 9a5.5 5.5 0 01-6.5-6.5 6 6 0 106.5 6.5z" fill="currentColor" opacity="0.1"/>
+              <path d="M13.5 9a5.5 5.5 0 01-6.5-6.5 6 6 0 106.5 6.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <span class="theme-slider"></span>
+        </div>
+        <span class="version-pill">0.7.0</span>
+      </div>
     </header>
 
-    <!-- Inactive State: Clean activation screen -->
+    <!-- Inactive State -->
     <div id="inactiveState" class="state-container" style="display:none;">
       <div class="inactive-content">
-        <div class="inactive-icon">⚠️</div>
-        <h2 class="inactive-title">Extension Not Active</h2>
+        <div class="inactive-glyph">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <rect x="6" y="6" width="44" height="44" rx="10" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.5"/>
+            <path d="M22 28h12M28 22v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2 class="inactive-title">Extension Inactive</h2>
         <p class="inactive-domain">
-          <span class="domain-label">Current page:</span><br>
+          <span class="label-dim">Current page</span>
           <strong id="inactiveDomain">-</strong>
         </p>
-
-        <div class="activation-options">
-          <button id="activateExtension" class="btn-activate btn-activate-primary">
-            <span class="btn-title">Activate Extension</span>
-            <span class="btn-subtitle">Requires permission for this domain</span>
-          </button>
-        </div>
+        <button id="activateExtension" class="btn-activate">
+          <span class="btn-activate-text">Activate on this domain</span>
+          <span class="btn-activate-sub">Requires permission grant</span>
+        </button>
       </div>
     </div>
 
-    <!-- Active State: Full controls -->
+    <!-- Active State -->
     <div id="activeState" class="state-container" style="display:none;">
 
-      <!-- Quick Toggles Section -->
-      <section class="section">
-      <h2>Headcount Tracking</h2>
-      <div class="toggle-group">
-        <label class="toggle">
-          <input type="checkbox" id="showLeftPanelBadges" checked>
-          <span class="toggle-slider"></span>
-          <span class="toggle-label">Show Left Panel Badges</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="showTimelineBadges" checked>
-          <span class="toggle-slider"></span>
-          <span class="toggle-label">Show Timeline Badges</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="showSprintSpecificBadges" checked>
-          <span class="toggle-slider"></span>
-          <span class="toggle-label">Show Sprint-Specific Badges</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="showZeroCountBadges">
-          <span class="toggle-slider"></span>
-          <span class="toggle-label">Show Zero Count Badges</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="showStoryAvatars" checked>
-          <span class="toggle-slider"></span>
-          <span class="toggle-label">Show Story-Level Details</span>
-        </label>
-      </div>
-    </section>
-
-    <!-- Avatar Display Section -->
-    <section class="section">
-      <h2>Avatar Display</h2>
-
       <!-- Display Mode -->
-      <div class="setting-row">
-        <label for="badgeDisplayMode" class="setting-label">Badge Style</label>
-        <select id="badgeDisplayMode" class="setting-select">
-          <option value="count">Numbers Only</option>
-          <option value="avatars">Profile Pictures</option>
-          <option value="personweeks">Person Weeks</option>
-        </select>
-      </div>
-
-      <!-- Avatar-specific settings (hidden when mode is not 'avatars') -->
-      <div id="avatarSettings" style="display: block;">
-
-        <!-- Max Visible Avatars -->
-        <div class="setting-row">
-          <label for="maxVisibleAvatars" class="setting-label">Max Avatars Shown</label>
-          <div class="slider-container">
-            <input type="range" id="maxVisibleAvatars" class="setting-slider" min="2" max="8" value="4">
-            <span id="maxVisibleAvatarsValue" class="slider-value">4</span>
+      <section class="panel">
+        <h2 class="panel-title">Display Mode</h2>
+        <div class="segment-control">
+          <input type="radio" name="displayMode" id="modeCount" value="count" checked>
+          <input type="radio" name="displayMode" id="modeAvatars" value="avatars">
+          <input type="radio" name="displayMode" id="modePw" value="personweeks">
+          <div class="segment-track">
+            <label for="modeCount" class="segment-label">Numbers</label>
+            <label for="modeAvatars" class="segment-label">Avatars</label>
+            <label for="modePw" class="segment-label">Person Wk</label>
+            <div class="segment-thumb"></div>
           </div>
         </div>
 
-      </div>
-
-      <!-- Person Weeks settings (hidden when mode is not 'personweeks') -->
-      <div id="pwSettings" style="display: none;">
-
-        <!-- SP Threshold -->
-        <div class="setting-row">
-          <label for="spThresholdPerPw" class="setting-label">SP Threshold (1 PW ≤)</label>
-          <div class="slider-container">
-            <input type="range" id="spThresholdPerPw" class="setting-slider" min="1" max="13" value="5">
-            <span id="spThresholdPerPwValue" class="slider-value">5</span>
+        <!-- Avatar settings (revealed when Avatars mode selected) -->
+        <div id="avatarSettings" class="sub-settings">
+          <div class="setting-row">
+            <span class="setting-label">Max visible avatars</span>
+            <div class="setting-control">
+              <input type="range" id="maxVisibleAvatars" class="range-input" min="2" max="8" value="4">
+              <span id="maxVisibleAvatarsValue" class="range-pill">4</span>
+            </div>
           </div>
         </div>
 
-        <!-- PD Threshold -->
-        <div class="setting-row">
-          <label for="pdThresholdPerPw" class="setting-label">Days Threshold (1 PW ≤)</label>
-          <div class="slider-container">
-            <input type="range" id="pdThresholdPerPw" class="setting-slider" min="1" max="10" value="4">
-            <span id="pdThresholdPerPwValue" class="slider-value">4</span>
+        <!-- PW settings (revealed when Person Wk mode selected) -->
+        <div id="pwSettings" class="sub-settings">
+          <div class="setting-row">
+            <span class="setting-label">SP threshold <span class="hint">(1 PW &le;)</span></span>
+            <div class="setting-control">
+              <input type="range" id="spThresholdPerPw" class="range-input" min="1" max="13" value="5">
+              <span id="spThresholdPerPwValue" class="range-pill">5</span>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Days threshold <span class="hint">(1 PW &le;)</span></span>
+            <div class="setting-control">
+              <input type="range" id="pdThresholdPerPw" class="range-input" min="1" max="10" value="4">
+              <span id="pdThresholdPerPwValue" class="range-pill">4</span>
+            </div>
           </div>
         </div>
+      </section>
 
-      </div>
-    </section>
+      <!-- Visibility -->
+      <section class="panel">
+        <h2 class="panel-title">Visibility</h2>
+        <div class="toggle-list">
+          <label class="toggle-row">
+            <span class="toggle-text">Left panel badges</span>
+            <span class="switch">
+              <input type="checkbox" id="showLeftPanelBadges" checked>
+              <span class="switch-track"><span class="switch-knob"></span></span>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-text">Timeline badges</span>
+            <span class="switch">
+              <input type="checkbox" id="showTimelineBadges" checked>
+              <span class="switch-track"><span class="switch-knob"></span></span>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-text">Sprint-specific badges</span>
+            <span class="switch">
+              <input type="checkbox" id="showSprintSpecificBadges" checked>
+              <span class="switch-track"><span class="switch-knob"></span></span>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-text">Zero count badges</span>
+            <span class="switch">
+              <input type="checkbox" id="showZeroCountBadges">
+              <span class="switch-track"><span class="switch-knob"></span></span>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-text">Story-level details</span>
+            <span class="switch">
+              <input type="checkbox" id="showStoryAvatars" checked>
+              <span class="switch-track"><span class="switch-knob"></span></span>
+            </span>
+          </label>
+        </div>
+      </section>
 
-    <!-- Statistics Dashboard Section -->
-    <section class="section">
-      <h2>Statistics Dashboard</h2>
+      <!-- Cache -->
+      <section class="panel">
+        <h2 class="panel-title">Cache</h2>
+        <div class="cache-strip">
+          <div class="cache-chip">
+            <span class="cache-chip-value" id="cacheEntries">0 / 100</span>
+            <span class="cache-chip-label">entries</span>
+          </div>
+          <div class="cache-chip">
+            <span class="cache-chip-value" id="cacheHitRate">0%</span>
+            <span class="cache-chip-label">hit rate</span>
+          </div>
+          <div class="cache-chip">
+            <span class="cache-chip-value" id="cacheSize">0 KB</span>
+            <span class="cache-chip-label">size</span>
+          </div>
+        </div>
+        <div class="cache-age">
+          <span class="label-dim">Age range</span>
+          <span class="mono" id="cacheAgeRange">-</span>
+        </div>
+        <div class="cache-actions">
+          <button id="clearCache" class="btn-compact">Clear All</button>
+          <button id="refreshCache" class="btn-compact">Refresh</button>
+        </div>
+        <div class="cache-epic-row">
+          <input type="text" id="epicKeyInput" class="input-dark" placeholder="GS-12345">
+          <button id="clearEpicCache" class="btn-compact">Clear Epic</button>
+        </div>
+      </section>
 
-      <!-- Cache Stats -->
-      <div class="stat-group">
-        <h3>Cache</h3>
-        <div class="stat-row">
-          <span class="stat-label">Entries:</span>
-          <span class="stat-value" id="cacheEntries">0 / 100</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Hit Rate:</span>
-          <span class="stat-value" id="cacheHitRate">0%</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Size:</span>
-          <span class="stat-value" id="cacheSize">0 KB</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Age Range:</span>
-          <span class="stat-value" id="cacheAgeRange">-</span>
-        </div>
-      </div>
+      <!-- Statistics (collapsible) -->
+      <section class="panel">
+        <button class="panel-toggle" id="statsToggle" data-target="statsBody">
+          <h2 class="panel-title">Statistics</h2>
+          <svg class="toggle-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div id="statsBody" class="collapsible-body">
+          <!-- Processing stats: 2x2 grid -->
+          <div class="stats-grid-2x2">
+            <div class="stats-tile">
+              <span class="stats-tile-val" id="epicsProcessed">0</span>
+              <span class="stats-tile-lbl">Epics processed</span>
+            </div>
+            <div class="stats-tile">
+              <span class="stats-tile-val" id="badgesInjected">0</span>
+              <span class="stats-tile-lbl">Badges injected</span>
+            </div>
+            <div class="stats-tile">
+              <span class="stats-tile-val" id="apiCalls">0</span>
+              <span class="stats-tile-lbl">API calls</span>
+            </div>
+            <div class="stats-tile">
+              <span class="stats-tile-val" id="processingTime">0ms</span>
+              <span class="stats-tile-lbl">Avg time</span>
+            </div>
+          </div>
 
-      <!-- Processing Stats -->
-      <div class="stat-group">
-        <h3>Processing</h3>
-        <div class="stat-row">
-          <span class="stat-label">Epics Processed:</span>
-          <span class="stat-value" id="epicsProcessed">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Badges Injected:</span>
-          <span class="stat-value" id="badgesInjected">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">API Calls:</span>
-          <span class="stat-value" id="apiCalls">0 (0 failed)</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Processing Time:</span>
-          <span class="stat-value" id="processingTime">0ms avg</span>
-        </div>
-      </div>
+          <!-- Badge counts: compact inline -->
+          <div class="stats-badges-row">
+            <span class="stats-badge-item"><span class="stats-badge-num" id="leftPanelBadges">0</span> left panel</span>
+            <span class="stats-badge-sep"></span>
+            <span class="stats-badge-item"><span class="stats-badge-num" id="timelineBadges">0</span> timeline</span>
+            <span class="stats-badge-sep"></span>
+            <span class="stats-badge-item"><span class="stats-badge-num" id="sprintBadges">0</span> sprint</span>
+          </div>
 
-      <!-- Badge Stats -->
-      <div class="stat-group">
-        <h3>Badges</h3>
-        <div class="stat-row">
-          <span class="stat-label">Left Panel:</span>
-          <span class="stat-value" id="leftPanelBadges">0</span>
+          <!-- Errors: alert bar -->
+          <div class="stats-error-bar" id="statsErrorBar">
+            <div class="stats-error-top">
+              <span class="stats-error-icon">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 4v2.5M6 8h.005" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.2"/></svg>
+              </span>
+              <span><span id="apiErrors">0</span> errors</span>
+            </div>
+            <span class="stats-error-msg mono truncate" id="lastError">None</span>
+          </div>
         </div>
-        <div class="stat-row">
-          <span class="stat-label">Timeline:</span>
-          <span class="stat-value" id="timelineBadges">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Sprint-Specific:</span>
-          <span class="stat-value" id="sprintBadges">0</span>
-        </div>
-      </div>
+      </section>
 
-      <!-- Error Stats -->
-      <div class="stat-group">
-        <h3>Errors</h3>
-        <div class="stat-row">
-          <span class="stat-label">API Errors:</span>
-          <span class="stat-value" id="apiErrors">0</span>
+      <!-- Domain footer -->
+      <section class="panel panel-flush">
+        <div class="domain-bar">
+          <div class="domain-bar-info">
+            <span class="label-dim">Domain</span>
+            <span class="mono" id="activeDomain">-</span>
+          </div>
+          <button id="removeDomain" class="btn-danger-text">Remove</button>
         </div>
-        <div class="stat-row">
-          <span class="stat-label">Last Error:</span>
-          <span class="stat-value" id="lastError">None</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Cache Controls Section -->
-    <section class="section">
-      <h2>Cache Controls</h2>
-      <div class="control-group">
-        <button id="clearCache" class="btn btn-secondary">Clear All Cache</button>
-        <button id="refreshCache" class="btn btn-secondary">Refresh All</button>
-      </div>
-      <div class="control-group">
-        <input type="text" id="epicKeyInput" placeholder="Enter epic key (e.g., GS-12345)" class="input">
-        <button id="clearEpicCache" class="btn btn-secondary">Clear Epic</button>
-      </div>
-    </section>
-
-    <!-- Advanced Settings Link -->
-    <section class="section">
-      <h2>Settings</h2>
-      <div class="settings-preview">
-        <div class="setting-row">
-          <span class="setting-label">Cache TTL:</span>
-          <span class="setting-value" id="cacheTtl">5 minutes</span>
-        </div>
-        <div class="setting-row">
-          <span class="setting-label">Debounce Delay:</span>
-          <span class="setting-value" id="debounceDelay">500ms</span>
-        </div>
-        <div class="setting-row">
-          <span class="setting-label">Badge Theme:</span>
-          <span class="setting-value" id="badgeTheme">Auto</span>
-        </div>
-      </div>
-      <button id="openAdvancedSettings" class="btn btn-link">Advanced Settings →</button>
-    </section>
-
-    <!-- Domain Management Section (at bottom) -->
-    <section class="section domain-management-section">
-      <h2>Domain Management</h2>
-      <div class="domain-management-content">
-        <div class="domain-info-row">
-          <span class="info-label">Domain:</span>
-          <span class="info-value" id="activeDomain">-</span>
-        </div>
-        <div class="domain-actions">
-          <button id="removeDomain" class="btn btn-secondary">
-            Remove Domain
-          </button>
-        </div>
-      </div>
-    </section>
+      </section>
 
     </div>
-    <!-- End Active State -->
+    <!-- /Active State -->
 
   </div>
 

@@ -42,6 +42,69 @@ let statisticsInterval: NodeJS.Timeout | null = null;
 let currentTabDomain: string | null = null;
 let activationInProgress = false; // Prevents UI state reset during activation flow
 
+type PopupTheme = 'light' | 'dark' | 'system';
+const THEME_STORAGE_KEY = 'jira-plans-popup-theme';
+let currentTheme: PopupTheme = 'system';
+
+/**
+ * Apply theme to DOM and update toggle UI
+ */
+function applyTheme(theme: PopupTheme, animate = false): void {
+  currentTheme = theme;
+  const html = document.documentElement;
+
+  if (animate) {
+    document.body.classList.add('theme-shifting');
+    setTimeout(() => document.body.classList.remove('theme-shifting'), 400);
+  }
+
+  html.setAttribute('data-theme', theme);
+
+  // Update toggle UI
+  const toggle = document.getElementById('themeToggle');
+  if (toggle) {
+    toggle.setAttribute('data-active', theme);
+    toggle.querySelectorAll('.theme-opt').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-theme') === theme);
+    });
+  }
+}
+
+/**
+ * Load theme from storage and apply
+ */
+async function loadTheme(): Promise<void> {
+  // Instant apply from localStorage (sync, no FOUC)
+  const cached = localStorage.getItem(THEME_STORAGE_KEY) as PopupTheme | null;
+  if (cached) applyTheme(cached);
+
+  // Then confirm from chrome.storage.sync (authoritative, cross-device)
+  try {
+    const result = await chrome.storage.sync.get(THEME_STORAGE_KEY);
+    const stored = result[THEME_STORAGE_KEY] as PopupTheme | undefined;
+    if (stored && stored !== cached) {
+      applyTheme(stored);
+      localStorage.setItem(THEME_STORAGE_KEY, stored);
+    } else if (!stored && !cached) {
+      applyTheme('system');
+    }
+  } catch {
+    if (!cached) applyTheme('system');
+  }
+}
+
+/**
+ * Save theme preference
+ */
+async function saveTheme(theme: PopupTheme): Promise<void> {
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  try {
+    await chrome.storage.sync.set({ [THEME_STORAGE_KEY]: theme });
+  } catch (e) {
+    console.error('[Popup] Failed to save theme:', e);
+  }
+}
+
 /**
  * Check if content script is active on current tab
  */
@@ -99,6 +162,7 @@ async function updateDomainManagementSection(): Promise<void> {
  * Initialize popup when DOM is ready
  */
 document.addEventListener('DOMContentLoaded', async () => {
+  await loadTheme();
   await loadSettings();
   await loadCurrentDomain();
   await loadAllowlistedDomains();
@@ -527,8 +591,11 @@ function applySettingsToUI(): void {
   if (showZeroCountBadges) showZeroCountBadges.checked = currentSettings.display.showZeroCountBadges;
   if (showStoryAvatars) showStoryAvatars.checked = currentSettings.display.showStoryAvatars;
 
-  // Avatar display settings
-  const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
+  // Display mode (radio buttons)
+  const modeRadio = document.querySelector(`input[name="displayMode"][value="${currentSettings.appearance.badgeDisplayMode}"]`) as HTMLInputElement;
+  if (modeRadio) modeRadio.checked = true;
+
+  // Mode-specific settings
   const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
   const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
   const avatarSettings = document.getElementById('avatarSettings');
@@ -539,7 +606,6 @@ function applySettingsToUI(): void {
   const pdThresholdPerPwValue = document.getElementById('pdThresholdPerPwValue');
   const pwSettings = document.getElementById('pwSettings');
 
-  if (badgeDisplayMode) badgeDisplayMode.value = currentSettings.appearance.badgeDisplayMode;
   if (maxVisibleAvatars) maxVisibleAvatars.value = String(currentSettings.appearance.maxVisibleAvatars);
   if (maxVisibleAvatarsValue) maxVisibleAvatarsValue.textContent = String(currentSettings.appearance.maxVisibleAvatars);
   if (spThresholdPerPw) spThresholdPerPw.value = String(currentSettings.appearance.spThresholdPerPw);
@@ -547,38 +613,12 @@ function applySettingsToUI(): void {
   if (pdThresholdPerPw) pdThresholdPerPw.value = String(currentSettings.appearance.pdThresholdPerPw);
   if (pdThresholdPerPwValue) pdThresholdPerPwValue.textContent = String(currentSettings.appearance.pdThresholdPerPw);
 
-  // Show/hide mode-specific settings
+  // Show/hide mode-specific settings with animation
   if (avatarSettings) {
-    avatarSettings.style.display = currentSettings.appearance.badgeDisplayMode === 'avatars' ? 'block' : 'none';
+    avatarSettings.classList.toggle('visible', currentSettings.appearance.badgeDisplayMode === 'avatars');
   }
   if (pwSettings) {
-    pwSettings.style.display = currentSettings.appearance.badgeDisplayMode === 'personweeks' ? 'block' : 'none';
-  }
-
-  // Settings preview
-  updateSettingsPreview();
-}
-
-/**
- * Update settings preview section
- */
-function updateSettingsPreview(): void {
-  const cacheTtl = document.getElementById('cacheTtl');
-  const debounceDelay = document.getElementById('debounceDelay');
-  const badgeTheme = document.getElementById('badgeTheme');
-
-  if (cacheTtl) {
-    const minutes = Math.floor(currentSettings.performance.cacheTtlMs / 60000);
-    cacheTtl.textContent = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-  }
-
-  if (debounceDelay) {
-    debounceDelay.textContent = `${currentSettings.performance.debounceDelayMs}ms`;
-  }
-
-  if (badgeTheme) {
-    const theme = currentSettings.appearance.badgeTheme;
-    badgeTheme.textContent = theme.charAt(0).toUpperCase() + theme.slice(1);
+    pwSettings.classList.toggle('visible', currentSettings.appearance.badgeDisplayMode === 'personweeks');
   }
 }
 
@@ -618,29 +658,30 @@ function setupEventListeners(): void {
     saveSettings();
   });
 
-  // Avatar display settings
-  const badgeDisplayMode = document.getElementById('badgeDisplayMode') as HTMLSelectElement;
+  // Display mode (radio buttons)
+  const avatarSettings = document.getElementById('avatarSettings');
+  const pwSettings = document.getElementById('pwSettings');
   const maxVisibleAvatars = document.getElementById('maxVisibleAvatars') as HTMLInputElement;
   const maxVisibleAvatarsValue = document.getElementById('maxVisibleAvatarsValue');
-  const avatarSettings = document.getElementById('avatarSettings');
   const spThresholdPerPw = document.getElementById('spThresholdPerPw') as HTMLInputElement;
   const spThresholdPerPwValue = document.getElementById('spThresholdPerPwValue');
   const pdThresholdPerPw = document.getElementById('pdThresholdPerPw') as HTMLInputElement;
   const pdThresholdPerPwValue = document.getElementById('pdThresholdPerPwValue');
-  const pwSettings = document.getElementById('pwSettings');
 
-  badgeDisplayMode?.addEventListener('change', () => {
-    currentSettings.appearance.badgeDisplayMode = badgeDisplayMode.value as 'count' | 'avatars' | 'personweeks';
+  document.querySelectorAll('input[name="displayMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const value = (e.target as HTMLInputElement).value as 'count' | 'avatars' | 'personweeks';
+      currentSettings.appearance.badgeDisplayMode = value;
 
-    // Show/hide mode-specific settings
-    if (avatarSettings) {
-      avatarSettings.style.display = badgeDisplayMode.value === 'avatars' ? 'block' : 'none';
-    }
-    if (pwSettings) {
-      pwSettings.style.display = badgeDisplayMode.value === 'personweeks' ? 'block' : 'none';
-    }
+      if (avatarSettings) {
+        avatarSettings.classList.toggle('visible', value === 'avatars');
+      }
+      if (pwSettings) {
+        pwSettings.classList.toggle('visible', value === 'personweeks');
+      }
 
-    saveSettings();
+      saveSettings();
+    });
   });
 
   maxVisibleAvatars?.addEventListener('input', () => {
@@ -685,11 +726,27 @@ function setupEventListeners(): void {
   refreshCache?.addEventListener('click', handleRefreshCache);
   clearEpicCache?.addEventListener('click', handleClearEpicCache);
 
-  // Advanced settings
-  const openAdvancedSettings = document.getElementById('openAdvancedSettings');
-  openAdvancedSettings?.addEventListener('click', () => {
-    // TODO: Open advanced settings page
-    alert('Advanced settings coming soon!');
+  // Theme toggle
+  document.querySelectorAll('.theme-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const theme = btn.getAttribute('data-theme') as PopupTheme;
+      if (theme && theme !== currentTheme) {
+        applyTheme(theme, true);
+        saveTheme(theme);
+      }
+    });
+  });
+
+  // Collapsible sections
+  document.querySelectorAll('.panel-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      if (!targetId) return;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      btn.classList.toggle('open');
+      target.classList.toggle('open');
+    });
   });
 
   // Inactive state button
