@@ -72,8 +72,21 @@ jobs:
           echo "Current store status: $UPLOAD_STATE"
 
           if [ "$UPLOAD_STATE" = "IN_REVIEW" ]; then
-            echo "Extension is currently IN_REVIEW — cannot upload until review completes"
-            exit 1
+            echo "Extension is IN_REVIEW — cancelling pending review..."
+            CANCEL_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Content-Length: 0" \
+              -X POST \
+              "https://chromewebstore.googleapis.com/v2/publishers/default/items/$EXTENSION_ID:cancelSubmission")
+            HTTP_STATUS=$(echo "$CANCEL_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+            BODY=$(echo "$CANCEL_RESPONSE" | sed '/HTTP_STATUS:/d')
+            echo "Cancel response ($HTTP_STATUS):"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+            if [ "$HTTP_STATUS" != "200" ]; then
+              echo "Failed to cancel review — try again after review completes"
+              exit 1
+            fi
+            echo "Review cancelled"
           fi
 
           # Upload
