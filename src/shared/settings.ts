@@ -18,8 +18,7 @@ export interface ExtensionSettings {
     badgeDisplayMode: 'count' | 'avatars' | 'personweeks';
     spThresholdPerPw: number;  // SP ceiling for 1 PW, above = 2 PW (default 5)
     pdThresholdPerPw: number;  // Person-days ceiling for 1 PW, above = 2 PW (default 4)
-    epicLevelPw: boolean;      // Use epic's own SP/days as direct PW count (1 SP or 1 day = 1 PW)
-    epicEstimateTrumpsStories: boolean; // When epic has own estimate AND stories, use epic estimate
+    pwSource: 'stories' | 'epic' | 'epic-fallback'; // PW data source: stories only, epic only, or epic with story fallback
     maxVisibleAvatars: number; // 2-8, default 4
     badgeTheme: 'auto' | 'light' | 'dark' | 'custom';
     leftPanelBadgeSize: 'small' | 'normal' | 'large';
@@ -68,8 +67,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
     badgeDisplayMode: 'count',
     spThresholdPerPw: 5,
     pdThresholdPerPw: 4,
-    epicLevelPw: false,
-    epicEstimateTrumpsStories: true,
+    pwSource: 'stories' as const,
     maxVisibleAvatars: 4,
     badgeTheme: 'auto',
     leftPanelBadgeSize: 'normal',
@@ -111,6 +109,14 @@ export const SETTINGS_STORAGE_KEY = 'jira-plans-headcount-settings';
  * Helper to merge partial settings with defaults
  */
 export function mergeWithDefaults(partial: Partial<ExtensionSettings>): ExtensionSettings {
+  // Migrate old epicLevelPw/epicEstimateTrumpsStories booleans → pwSource
+  const appearance = partial.appearance as Record<string, unknown> | undefined;
+  if (appearance && !appearance.pwSource && appearance.epicLevelPw) {
+    appearance.pwSource = appearance.epicEstimateTrumpsStories === false ? 'epic-fallback' : 'epic';
+    delete appearance.epicLevelPw;
+    delete appearance.epicEstimateTrumpsStories;
+  }
+
   return {
     display: { ...DEFAULT_SETTINGS.display, ...partial.display },
     appearance: { ...DEFAULT_SETTINGS.appearance, ...partial.appearance },

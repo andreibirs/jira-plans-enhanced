@@ -331,17 +331,18 @@ function personEffortToPw(effort: PersonEffort): number {
  * Uses current threshold settings so changes are reflected immediately
  */
 function computePersonWeeks(cachedData: CachedAssigneeData): { total: number; remaining: number; epicLevel: boolean } {
-  // Epic-level PW: epic's own SP/days used directly as PW (1 SP = 1 PW, 1 day = 1 PW)
-  if (currentSettings.appearance.epicLevelPw && cachedData.epicEstimate) {
-    const hasStories = cachedData.totalStoryCount > 0;
-    const useEpicEstimate = !hasStories || currentSettings.appearance.epicEstimateTrumpsStories;
-    if (useEpicEstimate) {
-      // SP = direct PW (1 SP = 1 PW), days = convert (5 days = 1 PW)
-      const epicPw = (cachedData.epicEstimate.sp && cachedData.epicEstimate.sp > 0)
-        ? Math.ceil(cachedData.epicEstimate.sp)
-        : Math.ceil((cachedData.epicEstimate.pd || 0) / 5);
-      return { total: epicPw, remaining: epicPw, epicLevel: true };
-    }
+  // Epic-level PW: epic's own SP/days used as PW (1 SP = 1 PW, 5 days = 1 PW)
+  const src = currentSettings.appearance.pwSource;
+  if (src !== 'stories' && cachedData.epicEstimate) {
+    // 'epic' = always use epic estimate; 'epic-fallback' = use epic if present, else fall through to stories
+    const epicPw = (cachedData.epicEstimate.sp && cachedData.epicEstimate.sp > 0)
+      ? Math.ceil(cachedData.epicEstimate.sp)
+      : Math.ceil((cachedData.epicEstimate.pd || 0) / 5);
+    return { total: epicPw, remaining: epicPw, epicLevel: true };
+  }
+  if (src === 'epic' && !cachedData.epicEstimate) {
+    // Epic mode but no estimate on the epic — show 0
+    return { total: 0, remaining: 0, epicLevel: true };
   }
 
   // Story-level PW: aggregate per-person-per-sprint effort
@@ -825,11 +826,11 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
 
     // Dynamically detect Jira base URL from current page
     const JIRA_BASE_URL = `${window.location.protocol}//${window.location.host}`;
-    const jql = `"Epic Link" = ${epicKey}`;
+    const jql = `"Epic Link" = ${epicKey} OR key = ${epicKey}`;
     // Request sprint field along with assignee
     // customfield_11002 is commonly used for sprints, but this may vary by Jira instance
     const maxResults = currentSettings.performance.apiMaxResults;
-    const url = `${JIRA_BASE_URL}/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=assignee,customfield_11002,customfield_10003,timeestimate&maxResults=${maxResults}`;
+    const url = `${JIRA_BASE_URL}/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=assignee,customfield_11002,customfield_10003,timeestimate,issuetype&maxResults=${maxResults}`;
 
     if (currentSettings.debug.logApiRequests) {
       console.log(`[Headcount] API request: ${epicKey}`);
@@ -855,30 +856,23 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     }
 
     const data = await response.json();
-    const issues = data.issues || [];
+    const allIssues = data.issues || [];
 
-    // Fetch epic's own estimates (SP + time) — always fetched, setting controls interpretation
+    // Separate the epic itself from its child stories
     let epicEstimate: { sp: number | null; pd: number | null } | undefined;
-    try {
-      const epicUrl = `${JIRA_BASE_URL}/rest/api/2/issue/${epicKey}?fields=customfield_10003,timeestimate`;
-      const epicResponse = await fetch(epicUrl, {
-        method: 'GET',
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal,
-      });
-      if (epicResponse.ok) {
-        const epicData = await epicResponse.json();
-        const epicSp = epicData.fields?.customfield_10003 as number | null;
-        const epicTimeSec = epicData.fields?.timeestimate as number | null;
+    const issues = allIssues.filter((issue: { key: string; fields?: { issuetype?: { name?: string }; customfield_10003?: number | null; timeestimate?: number | null } }) => {
+      if (issue.key === epicKey) {
+        // Extract epic's own estimates for epic-level PW
+        const epicSp = issue.fields?.customfield_10003 as number | null;
+        const epicTimeSec = issue.fields?.timeestimate as number | null;
         const epicPd = epicTimeSec ? epicTimeSec / 28800 : null;
         if ((epicSp && epicSp > 0) || (epicPd && epicPd > 0)) {
           epicEstimate = { sp: epicSp, pd: epicPd };
         }
+        return false; // exclude epic from child story processing
       }
-    } catch {
-      // Non-critical — fall back to story-level PW
-    }
+      return true;
+    });
 
     // Extract unique assignee info (overall count) - keyed by accountId
     const uniqueAssignees = new Map<string, AssigneeInfo>();
@@ -1380,8 +1374,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       oldSettings?.appearance?.spThresholdPerPw !== newSettings.appearance?.spThresholdPerPw ||
       oldSettings?.appearance?.pdThresholdPerPw !== newSettings.appearance?.pdThresholdPerPw;
     const epicPwSettingChanged =
-      oldSettings?.appearance?.epicLevelPw !== newSettings.appearance?.epicLevelPw ||
-      oldSettings?.appearance?.epicEstimateTrumpsStories !== newSettings.appearance?.epicEstimateTrumpsStories;
+      oldSettings?.appearance?.pwSource !== newSettings.appearance?.pwSource;
 
     if (oldDisplayMode && newDisplayMode && oldDisplayMode !== newDisplayMode) {
       // Display mode changed - clear everything and re-inject

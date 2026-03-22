@@ -428,24 +428,84 @@ html[data-theme="system"] .theme-slider {
   margin-top: 12px;
 }
 
-.sub-settings-nested {
+/* ── PW Source Selector ─────────────────── */
+.pw-source-label {
+  font-size: 11px;
+  color: var(--text-2);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.pw-source-control {
+  position: relative;
+}
+
+.pw-source-control input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pw-source-track {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  position: relative;
+}
+
+.pw-source-option {
+  text-align: center;
+  font-size: 10.5px;
+  padding: 5px 4px;
+  cursor: pointer;
+  color: var(--text-2);
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+}
+
+.pw-source-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(33.333% - 1.33px);
+  height: calc(100% - 4px);
+  background: var(--accent-dim);
+  border-radius: calc(var(--radius-sm) - 1px);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#pwEpic:checked ~ .pw-source-track .pw-source-thumb { transform: translateX(0); }
+#pwEpicFallback:checked ~ .pw-source-track .pw-source-thumb { transform: translateX(100%); }
+#pwStories:checked ~ .pw-source-track .pw-source-thumb { transform: translateX(200%); }
+
+#pwEpic:checked ~ .pw-source-track label[for="pwEpic"],
+#pwEpicFallback:checked ~ .pw-source-track label[for="pwEpicFallback"],
+#pwStories:checked ~ .pw-source-track label[for="pwStories"] {
+  color: var(--accent-strong);
+}
+
+.pw-source-hint {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.pw-story-thresholds {
   max-height: 0;
   overflow: hidden;
   opacity: 0;
-  transition: max-height 0.25s ease, opacity 0.2s ease;
-  padding-left: 8px;
+  transition: max-height 0.25s ease, opacity 0.2s ease, margin 0.25s ease;
 }
 
-.sub-settings-nested.visible {
-  max-height: 50px;
+.pw-story-thresholds.visible {
+  max-height: 100px;
   opacity: 1;
-  margin-top: 4px;
-}
-
-.pw-divider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 10px 0 8px;
+  margin-top: 10px;
 }
 
 /* ── Setting Row ───────────────────────── */

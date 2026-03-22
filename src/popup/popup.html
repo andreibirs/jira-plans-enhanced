@@ -38,7 +38,7 @@
           </button>
           <span class="theme-slider"></span>
         </div>
-        <span class="version-pill">0.7.0</span>
+        <span class="version-pill">0.7.1</span>
       </div>
     </header>
 
@@ -94,35 +94,33 @@
 
         <!-- PW settings (revealed when Person Wk mode selected) -->
         <div id="pwSettings" class="sub-settings">
-          <label class="toggle-row">
-            <span class="toggle-text">Epic-level estimates <span class="hint">(SP/days = PW)</span></span>
-            <span class="switch">
-              <input type="checkbox" id="epicLevelPw">
-              <span class="switch-track"><span class="switch-knob"></span></span>
-            </span>
-          </label>
-          <div id="epicPwSubSettings" class="sub-settings-nested">
-            <label class="toggle-row">
-              <span class="toggle-text">Epic estimate trumps stories</span>
-              <span class="switch">
-                <input type="checkbox" id="epicEstimateTrumpsStories" checked>
-                <span class="switch-track"><span class="switch-knob"></span></span>
-              </span>
-            </label>
-          </div>
-          <div class="pw-divider"></div>
-          <div class="setting-row">
-            <span class="setting-label">SP threshold <span class="hint">(1 PW &le;)</span></span>
-            <div class="setting-control">
-              <input type="range" id="spThresholdPerPw" class="range-input" min="1" max="13" value="5">
-              <span id="spThresholdPerPwValue" class="range-pill">5</span>
+          <span class="pw-source-label">PW source</span>
+          <div class="pw-source-control">
+            <input type="radio" name="pwSource" id="pwEpic" value="epic">
+            <input type="radio" name="pwSource" id="pwEpicFallback" value="epic-fallback">
+            <input type="radio" name="pwSource" id="pwStories" value="stories" checked>
+            <div class="pw-source-track">
+              <label for="pwEpic" class="pw-source-option">Epic</label>
+              <label for="pwEpicFallback" class="pw-source-option">Epic &rarr; Stories</label>
+              <label for="pwStories" class="pw-source-option">Stories</label>
+              <div class="pw-source-thumb"></div>
             </div>
           </div>
-          <div class="setting-row">
-            <span class="setting-label">Days threshold <span class="hint">(1 PW &le;)</span></span>
-            <div class="setting-control">
-              <input type="range" id="pdThresholdPerPw" class="range-input" min="1" max="10" value="4">
-              <span id="pdThresholdPerPwValue" class="range-pill">4</span>
+          <div id="pwSourceHint" class="pw-source-hint">Aggregate PW from child issues</div>
+          <div id="pwStoryThresholds" class="pw-story-thresholds">
+            <div class="setting-row">
+              <span class="setting-label">SP threshold <span class="hint">(1 PW &le;)</span></span>
+              <div class="setting-control">
+                <input type="range" id="spThresholdPerPw" class="range-input" min="1" max="13" value="5">
+                <span id="spThresholdPerPwValue" class="range-pill">5</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span class="setting-label">Days threshold <span class="hint">(1 PW &le;)</span></span>
+              <div class="setting-control">
+                <input type="range" id="pdThresholdPerPw" class="range-input" min="1" max="10" value="4">
+                <span id="pdThresholdPerPwValue" class="range-pill">4</span>
+              </div>
             </div>
           </div>
         </div>

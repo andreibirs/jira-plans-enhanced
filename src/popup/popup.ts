@@ -577,6 +577,23 @@ async function removeDomainFromAllowlist(domain: string): Promise<void> {
 /**
  * Apply current settings to UI controls
  */
+/**
+ * Show/hide PW sub-panels based on selected source
+ */
+const PW_SOURCE_HINTS: Record<string, string> = {
+  'stories': 'Aggregate PW from child issues',
+  'epic': 'Use epic\u2019s SP/days directly as PW',
+  'epic-fallback': 'Epic estimate when present, otherwise from stories',
+};
+
+function updatePwSourceUI(source: 'stories' | 'epic' | 'epic-fallback'): void {
+  const thresholds = document.getElementById('pwStoryThresholds');
+  const hint = document.getElementById('pwSourceHint');
+  const showThresholds = source === 'stories' || source === 'epic-fallback';
+  if (thresholds) thresholds.classList.toggle('visible', showThresholds);
+  if (hint) hint.textContent = PW_SOURCE_HINTS[source] || '';
+}
+
 function applySettingsToUI(): void {
   // Quick toggles
   const showLeftPanelBadges = document.getElementById('showLeftPanelBadges') as HTMLInputElement;
@@ -613,13 +630,10 @@ function applySettingsToUI(): void {
   if (pdThresholdPerPw) pdThresholdPerPw.value = String(currentSettings.appearance.pdThresholdPerPw);
   if (pdThresholdPerPwValue) pdThresholdPerPwValue.textContent = String(currentSettings.appearance.pdThresholdPerPw);
 
-  // Epic-level PW toggles
-  const epicLevelPw = document.getElementById('epicLevelPw') as HTMLInputElement;
-  const epicEstimateTrumpsStories = document.getElementById('epicEstimateTrumpsStories') as HTMLInputElement;
-  const epicPwSubSettings = document.getElementById('epicPwSubSettings');
-  if (epicLevelPw) epicLevelPw.checked = currentSettings.appearance.epicLevelPw;
-  if (epicEstimateTrumpsStories) epicEstimateTrumpsStories.checked = currentSettings.appearance.epicEstimateTrumpsStories;
-  if (epicPwSubSettings) epicPwSubSettings.classList.toggle('visible', currentSettings.appearance.epicLevelPw);
+  // PW source radio
+  const pwSourceRadio = document.querySelector(`input[name="pwSource"][value="${currentSettings.appearance.pwSource}"]`) as HTMLInputElement;
+  if (pwSourceRadio) pwSourceRadio.checked = true;
+  updatePwSourceUI(currentSettings.appearance.pwSource);
 
   // Show/hide mode-specific settings with animation
   if (avatarSettings) {
@@ -725,20 +739,14 @@ function setupEventListeners(): void {
     saveSettings();
   });
 
-  // Epic-level PW toggles
-  const epicLevelPw = document.getElementById('epicLevelPw') as HTMLInputElement;
-  const epicEstimateTrumpsStories = document.getElementById('epicEstimateTrumpsStories') as HTMLInputElement;
-  const epicPwSubSettings = document.getElementById('epicPwSubSettings');
-
-  epicLevelPw?.addEventListener('change', () => {
-    currentSettings.appearance.epicLevelPw = epicLevelPw.checked;
-    if (epicPwSubSettings) epicPwSubSettings.classList.toggle('visible', epicLevelPw.checked);
-    saveSettings();
-  });
-
-  epicEstimateTrumpsStories?.addEventListener('change', () => {
-    currentSettings.appearance.epicEstimateTrumpsStories = epicEstimateTrumpsStories.checked;
-    saveSettings();
+  // PW source selector
+  document.querySelectorAll('input[name="pwSource"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const value = (e.target as HTMLInputElement).value as 'stories' | 'epic' | 'epic-fallback';
+      currentSettings.appearance.pwSource = value;
+      updatePwSourceUI(value);
+      saveSettings();
+    });
   });
 
   // Cache controls
