@@ -613,6 +613,14 @@ function applySettingsToUI(): void {
   if (pdThresholdPerPw) pdThresholdPerPw.value = String(currentSettings.appearance.pdThresholdPerPw);
   if (pdThresholdPerPwValue) pdThresholdPerPwValue.textContent = String(currentSettings.appearance.pdThresholdPerPw);
 
+  // Epic-level PW toggles
+  const epicLevelPw = document.getElementById('epicLevelPw') as HTMLInputElement;
+  const epicEstimateTrumpsStories = document.getElementById('epicEstimateTrumpsStories') as HTMLInputElement;
+  const epicPwSubSettings = document.getElementById('epicPwSubSettings');
+  if (epicLevelPw) epicLevelPw.checked = currentSettings.appearance.epicLevelPw;
+  if (epicEstimateTrumpsStories) epicEstimateTrumpsStories.checked = currentSettings.appearance.epicEstimateTrumpsStories;
+  if (epicPwSubSettings) epicPwSubSettings.classList.toggle('visible', currentSettings.appearance.epicLevelPw);
+
   // Show/hide mode-specific settings with animation
   if (avatarSettings) {
     avatarSettings.classList.toggle('visible', currentSettings.appearance.badgeDisplayMode === 'avatars');
@@ -714,6 +722,22 @@ function setupEventListeners(): void {
       pdThresholdPerPwValue.textContent = String(value);
     }
 
+    saveSettings();
+  });
+
+  // Epic-level PW toggles
+  const epicLevelPw = document.getElementById('epicLevelPw') as HTMLInputElement;
+  const epicEstimateTrumpsStories = document.getElementById('epicEstimateTrumpsStories') as HTMLInputElement;
+  const epicPwSubSettings = document.getElementById('epicPwSubSettings');
+
+  epicLevelPw?.addEventListener('change', () => {
+    currentSettings.appearance.epicLevelPw = epicLevelPw.checked;
+    if (epicPwSubSettings) epicPwSubSettings.classList.toggle('visible', epicLevelPw.checked);
+    saveSettings();
+  });
+
+  epicEstimateTrumpsStories?.addEventListener('change', () => {
+    currentSettings.appearance.epicEstimateTrumpsStories = epicEstimateTrumpsStories.checked;
     saveSettings();
   });
 

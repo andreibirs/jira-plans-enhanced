@@ -94,6 +94,23 @@
 
         <!-- PW settings (revealed when Person Wk mode selected) -->
         <div id="pwSettings" class="sub-settings">
+          <label class="toggle-row">
+            <span class="toggle-text">Epic-level estimates <span class="hint">(SP/days = PW)</span></span>
+            <span class="switch">
+              <input type="checkbox" id="epicLevelPw">
+              <span class="switch-track"><span class="switch-knob"></span></span>
+            </span>
+          </label>
+          <div id="epicPwSubSettings" class="sub-settings-nested">
+            <label class="toggle-row">
+              <span class="toggle-text">Epic estimate trumps stories</span>
+              <span class="switch">
+                <input type="checkbox" id="epicEstimateTrumpsStories" checked>
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </span>
+            </label>
+          </div>
+          <div class="pw-divider"></div>
           <div class="setting-row">
             <span class="setting-label">SP threshold <span class="hint">(1 PW &le;)</span></span>
             <div class="setting-control">

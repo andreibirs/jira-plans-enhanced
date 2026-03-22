@@ -423,9 +423,29 @@ html[data-theme="system"] .theme-slider {
 }
 
 .sub-settings.visible {
-  max-height: 150px;
+  max-height: 300px;
   opacity: 1;
   margin-top: 12px;
+}
+
+.sub-settings-nested {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+  padding-left: 8px;
+}
+
+.sub-settings-nested.visible {
+  max-height: 50px;
+  opacity: 1;
+  margin-top: 4px;
+}
+
+.pw-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 10px 0 8px;
 }
 
 /* ── Setting Row ───────────────────────── */

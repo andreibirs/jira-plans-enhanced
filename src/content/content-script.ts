@@ -39,6 +39,7 @@ interface CachedAssigneeData {
   effortPerPersonCurrentSprints: Map<string, Map<string, PersonEffort>>;  // ACTIVE/FUTURE → (userId → effort)
   estimatedStoryCount: number;
   totalStoryCount: number;
+  epicEstimate?: { sp: number | null; pd: number | null }; // Epic's own SP/days for direct PW
 }
 const assigneeCountCache = new Map<string, CachedAssigneeData>();
 
@@ -274,7 +275,17 @@ async function loadSettings(): Promise<void> {
 function buildPwOverride(cachedData: CachedAssigneeData): { text: string; tooltip: string } | undefined {
   if (currentSettings.appearance.badgeDisplayMode !== 'personweeks') return undefined;
 
-  const { total, remaining } = computePersonWeeks(cachedData);
+  const { total, remaining, epicLevel } = computePersonWeeks(cachedData);
+
+  if (epicLevel) {
+    // Epic-level PW: show direct estimate with source indicator
+    const est = cachedData.epicEstimate!;
+    const source = (est.sp && est.sp > 0) ? `${est.sp} SP` : `${est.pd} days`;
+    const text = `${total} PW`;
+    const tooltip = `${total} person-weeks (epic estimate: ${source})`;
+    return { text, tooltip };
+  }
+
   const { estimatedStoryCount, totalStoryCount, totalCount } = cachedData;
   const allEstimated = estimatedStoryCount >= totalStoryCount;
   const estimationNote = allEstimated ? '' : `, ${estimatedStoryCount}/${totalStoryCount}`;
@@ -319,7 +330,21 @@ function personEffortToPw(effort: PersonEffort): number {
  * Returns total PW (all sprints) and remaining PW (active/future only)
  * Uses current threshold settings so changes are reflected immediately
  */
-function computePersonWeeks(cachedData: CachedAssigneeData): { total: number; remaining: number } {
+function computePersonWeeks(cachedData: CachedAssigneeData): { total: number; remaining: number; epicLevel: boolean } {
+  // Epic-level PW: epic's own SP/days used directly as PW (1 SP = 1 PW, 1 day = 1 PW)
+  if (currentSettings.appearance.epicLevelPw && cachedData.epicEstimate) {
+    const hasStories = cachedData.totalStoryCount > 0;
+    const useEpicEstimate = !hasStories || currentSettings.appearance.epicEstimateTrumpsStories;
+    if (useEpicEstimate) {
+      // SP = direct PW (1 SP = 1 PW), days = convert (5 days = 1 PW)
+      const epicPw = (cachedData.epicEstimate.sp && cachedData.epicEstimate.sp > 0)
+        ? Math.ceil(cachedData.epicEstimate.sp)
+        : Math.ceil((cachedData.epicEstimate.pd || 0) / 5);
+      return { total: epicPw, remaining: epicPw, epicLevel: true };
+    }
+  }
+
+  // Story-level PW: aggregate per-person-per-sprint effort
   let total = 0;
   for (const effortPerPerson of cachedData.effortPerPersonPerSprint.values()) {
     for (const effort of effortPerPerson.values()) {
@@ -332,7 +357,7 @@ function computePersonWeeks(cachedData: CachedAssigneeData): { total: number; re
       remaining += personEffortToPw(effort);
     }
   }
-  return { total, remaining };
+  return { total, remaining, epicLevel: false };
 }
 
 /**
@@ -561,21 +586,30 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
     if (!cachedData) return;
 
     clearTimelineBadges(issueId);
-    const { total, remaining } = computePersonWeeks(cachedData);
-    const allEstimated = cachedData.estimatedStoryCount >= cachedData.totalStoryCount;
-    const estimationNote = allEstimated ? '' : `, ${cachedData.estimatedStoryCount}/${cachedData.totalStoryCount}`;
+    const { total, remaining, epicLevel } = computePersonWeeks(cachedData);
 
     let badgeText: string;
-    if (remaining === total) {
-      badgeText = `${total} PW${estimationNote ? ` (${cachedData.estimatedStoryCount}/${cachedData.totalStoryCount})` : ''}`;
+    let badgeTooltip: string;
+    if (epicLevel) {
+      const est = cachedData.epicEstimate!;
+      const source = (est.sp && est.sp > 0) ? `${est.sp} SP` : `${est.pd} days`;
+      badgeText = `${total} PW`;
+      badgeTooltip = `${total} person-weeks (epic estimate: ${source})`;
     } else {
-      badgeText = `${remaining} PW left (${total} total${estimationNote})`;
+      const allEstimated = cachedData.estimatedStoryCount >= cachedData.totalStoryCount;
+      const estimationNote = allEstimated ? '' : `, ${cachedData.estimatedStoryCount}/${cachedData.totalStoryCount}`;
+      if (remaining === total) {
+        badgeText = `${total} PW${estimationNote ? ` (${cachedData.estimatedStoryCount}/${cachedData.totalStoryCount})` : ''}`;
+      } else {
+        badgeText = `${remaining} PW left (${total} total${estimationNote})`;
+      }
+      badgeTooltip = `${remaining} person-weeks remaining, ${total} total (${totalCount} engineers, ${cachedData.totalStoryCount} stories${allEstimated ? '' : `, ${cachedData.estimatedStoryCount} estimated`})`;
     }
 
     const badge = document.createElement('span');
     badge.className = TIMELINE_BADGE_CLASS;
     badge.textContent = badgeText;
-    badge.title = `${remaining} person-weeks remaining, ${total} total (${totalCount} engineers, ${cachedData.totalStoryCount} stories${allEstimated ? '' : `, ${cachedData.estimatedStoryCount} estimated`})`;
+    badge.title = badgeTooltip;
     const fontSize = badgeText.length <= 4 ? '10px' : badgeText.length <= 10 ? '9px' : '8px';
     badge.style.cssText = `
       position: absolute;
@@ -823,6 +857,29 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     const data = await response.json();
     const issues = data.issues || [];
 
+    // Fetch epic's own estimates (SP + time) — always fetched, setting controls interpretation
+    let epicEstimate: { sp: number | null; pd: number | null } | undefined;
+    try {
+      const epicUrl = `${JIRA_BASE_URL}/rest/api/2/issue/${epicKey}?fields=customfield_10003,timeestimate`;
+      const epicResponse = await fetch(epicUrl, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+      if (epicResponse.ok) {
+        const epicData = await epicResponse.json();
+        const epicSp = epicData.fields?.customfield_10003 as number | null;
+        const epicTimeSec = epicData.fields?.timeestimate as number | null;
+        const epicPd = epicTimeSec ? epicTimeSec / 28800 : null;
+        if ((epicSp && epicSp > 0) || (epicPd && epicPd > 0)) {
+          epicEstimate = { sp: epicSp, pd: epicPd };
+        }
+      }
+    } catch {
+      // Non-critical — fall back to story-level PW
+    }
+
     // Extract unique assignee info (overall count) - keyed by accountId
     const uniqueAssignees = new Map<string, AssigneeInfo>();
     let estimatedStoryCount = 0;
@@ -1001,6 +1058,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       effortPerPersonCurrentSprints,
       estimatedStoryCount,
       totalStoryCount,
+      epicEstimate,
     });
 
     statistics.cache.totalEntries = assigneeCountCache.size;
@@ -1321,13 +1379,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     const thresholdChanged =
       oldSettings?.appearance?.spThresholdPerPw !== newSettings.appearance?.spThresholdPerPw ||
       oldSettings?.appearance?.pdThresholdPerPw !== newSettings.appearance?.pdThresholdPerPw;
+    const epicPwSettingChanged =
+      oldSettings?.appearance?.epicLevelPw !== newSettings.appearance?.epicLevelPw ||
+      oldSettings?.appearance?.epicEstimateTrumpsStories !== newSettings.appearance?.epicEstimateTrumpsStories;
 
     if (oldDisplayMode && newDisplayMode && oldDisplayMode !== newDisplayMode) {
       // Display mode changed - clear everything and re-inject
       clearAllBadges();
       processEpics();
-    } else if (thresholdChanged) {
-      // Threshold changed - clear story badges so they re-inject with new PW values
+    } else if (thresholdChanged || epicPwSettingChanged) {
+      // Threshold or epic PW settings changed - clear story badges so they re-inject with new PW values
       clearAllStoryAvatars();
       applyDisplaySettings();
       processEpics();
