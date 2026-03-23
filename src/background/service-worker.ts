@@ -215,8 +215,11 @@ async function updateIconForTab(tabId: number, url: string): Promise<void> {
       console.log(`[Icon Update] Set inactive badge for ${hostname}`);
     }
   } catch (error) {
-    // Not a valid URL or other error
-    console.error('[Icon Update] Failed to update icon:', error, 'URL:', url);
+    // Silently ignore "No tab with id" — tab closed before icon update completed
+    const msg = String(error);
+    if (!msg.includes('No tab with id')) {
+      console.error('[Icon Update] Failed to update icon:', error, 'URL:', url);
+    }
   }
 }
 
