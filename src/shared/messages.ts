@@ -13,7 +13,8 @@ import { ExtensionStatistics } from './statistics';
 export type PopupRequest =
   | { type: 'GET_STATISTICS' }
   | { type: 'CLEAR_CACHE'; epicKey?: string }
-  | { type: 'REFRESH_CACHE'; forceRefresh: boolean };
+  | { type: 'REFRESH_CACHE'; forceRefresh: boolean }
+  | { type: 'REDETECT_INSTANCE_CONFIG' };
 
 /**
  * Messages sent from Content Script to Popup
@@ -22,6 +23,7 @@ export type PopupResponse =
   | { type: 'GET_STATISTICS_RESPONSE'; success: true; statistics: ExtensionStatistics }
   | { type: 'CLEAR_CACHE_RESPONSE'; success: true; clearedCount: number }
   | { type: 'REFRESH_CACHE_RESPONSE'; success: true; refreshedCount: number }
+  | { type: 'REDETECT_INSTANCE_CONFIG_RESPONSE'; success: true; epicAvatarId: string; storyAvatarId: string; sprintFieldId: string; storyPointsFieldId: string }
   | { type: string; success: false; error: string };
 
 /**
@@ -37,6 +39,7 @@ export function isPopupRequest(message: unknown): message is PopupRequest {
     'GET_STATISTICS',
     'CLEAR_CACHE',
     'REFRESH_CACHE',
+    'REDETECT_INSTANCE_CONFIG',
   ];
 
   return typeof msg.type === 'string' && validTypes.includes(msg.type);

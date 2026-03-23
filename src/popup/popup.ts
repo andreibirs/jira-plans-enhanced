@@ -156,6 +156,155 @@ async function updateDomainManagementSection(): Promise<void> {
   if (!activeDomain || !currentTabDomain) return;
 
   activeDomain.textContent = currentTabDomain;
+  await updateInstanceConfigUI();
+}
+
+/**
+ * Update instance config UI with auto-detected values for the current domain.
+ * Reads avatar IDs from chrome.storage.local (per-domain cache set by issue-types.ts)
+ * and custom field IDs (future: per-domain cache set by field-detection.ts).
+ */
+async function updateInstanceConfigUI(): Promise<void> {
+  if (!currentTabDomain) return;
+
+  const dot = document.getElementById('configStatusDot');
+  const epicAvatarEl = document.getElementById('configEpicAvatar') as HTMLInputElement | null;
+  const storyAvatarEl = document.getElementById('configStoryAvatar') as HTMLInputElement | null;
+  const sprintFieldEl = document.getElementById('configSprintField') as HTMLInputElement | null;
+  const pointsFieldEl = document.getElementById('configPointsField') as HTMLInputElement | null;
+
+  // --- Read cached values ---
+  let avatarDetected = false;
+  let fieldsDetected = false;
+
+  try {
+    const result = await chrome.storage.local.get('issueTypeAvatars');
+    const entry = (result.issueTypeAvatars || {})[currentTabDomain];
+    if (entry && entry.fetchedAt > 0) {
+      if (epicAvatarEl) epicAvatarEl.value = entry.epicAvatarId;
+      if (storyAvatarEl) storyAvatarEl.value = entry.storyAvatarId;
+      avatarDetected = true;
+    } else {
+      if (epicAvatarEl) epicAvatarEl.value = '18807';
+      if (storyAvatarEl) storyAvatarEl.value = '18815';
+    }
+  } catch {
+    if (epicAvatarEl) epicAvatarEl.value = '18807';
+    if (storyAvatarEl) storyAvatarEl.value = '18815';
+  }
+
+  try {
+    const result = await chrome.storage.local.get('customFieldIds');
+    const entry = (result.customFieldIds || {})[currentTabDomain];
+    if (entry && entry.fetchedAt > 0) {
+      if (sprintFieldEl) sprintFieldEl.value = entry.sprintFieldId;
+      if (pointsFieldEl) pointsFieldEl.value = entry.storyPointsFieldId;
+      fieldsDetected = true;
+    } else {
+      if (sprintFieldEl) sprintFieldEl.value = 'customfield_11002';
+      if (pointsFieldEl) pointsFieldEl.value = 'customfield_10003';
+    }
+  } catch {
+    if (sprintFieldEl) sprintFieldEl.value = 'customfield_11002';
+    if (pointsFieldEl) pointsFieldEl.value = 'customfield_10003';
+  }
+
+  // --- Status dot ---
+  const allDetected = avatarDetected && fieldsDetected;
+  if (dot) {
+    dot.classList.remove('detected', 'defaults');
+    dot.classList.add(allDetected ? 'detected' : 'defaults');
+    dot.title = allDetected
+      ? 'Auto-detected from Jira API'
+      : 'Using defaults — click Re-detect or edit manually';
+  }
+
+  // Dim values that are defaults
+  if (epicAvatarEl) epicAvatarEl.classList.toggle('dimmed', !avatarDetected);
+  if (storyAvatarEl) storyAvatarEl.classList.toggle('dimmed', !avatarDetected);
+  if (sprintFieldEl) sprintFieldEl.classList.toggle('dimmed', !fieldsDetected);
+  if (pointsFieldEl) pointsFieldEl.classList.toggle('dimmed', !fieldsDetected);
+}
+
+/**
+ * Save manually edited config values to chrome.storage.local for the current domain.
+ * Writes to the same per-domain cache that auto-detection uses.
+ */
+async function saveInstanceConfigFromInputs(): Promise<void> {
+  if (!currentTabDomain) return;
+
+  const epicAvatar = (document.getElementById('configEpicAvatar') as HTMLInputElement)?.value?.trim();
+  const storyAvatar = (document.getElementById('configStoryAvatar') as HTMLInputElement)?.value?.trim();
+  const sprintField = (document.getElementById('configSprintField') as HTMLInputElement)?.value?.trim();
+  const pointsField = (document.getElementById('configPointsField') as HTMLInputElement)?.value?.trim();
+
+  // Save avatar IDs
+  if (epicAvatar && storyAvatar) {
+    try {
+      const result = await chrome.storage.local.get('issueTypeAvatars');
+      const cache = result.issueTypeAvatars || {};
+      cache[currentTabDomain] = { epicAvatarId: epicAvatar, storyAvatarId: storyAvatar, fetchedAt: Date.now() };
+      await chrome.storage.local.set({ issueTypeAvatars: cache });
+    } catch { /* ignore */ }
+  }
+
+  // Save custom field IDs
+  if (sprintField && pointsField) {
+    try {
+      const result = await chrome.storage.local.get('customFieldIds');
+      const cache = result.customFieldIds || {};
+      cache[currentTabDomain] = { sprintFieldId: sprintField, storyPointsFieldId: pointsField, fetchedAt: Date.now() };
+      await chrome.storage.local.set({ customFieldIds: cache });
+    } catch { /* ignore */ }
+  }
+
+  // Update status dot to green (manual = detected)
+  const dot = document.getElementById('configStatusDot');
+  if (dot) {
+    dot.classList.remove('defaults');
+    dot.classList.add('detected');
+    dot.title = 'Manually configured';
+  }
+
+  // Remove dimmed state from all inputs
+  document.querySelectorAll('.config-input').forEach(el => el.classList.remove('dimmed'));
+}
+
+/**
+ * Clear cached instance config for current domain and trigger re-detection.
+ * Sends a message to the content script to re-fetch from the Jira API
+ * and returns fresh values — no page reload needed.
+ */
+async function redetectInstanceConfig(): Promise<void> {
+  if (!currentTabDomain) return;
+
+  const btn = document.getElementById('redetectConfig') as HTMLButtonElement | null;
+
+  // Disable button during detection
+  if (btn) { btn.disabled = true; btn.textContent = 'Detecting...'; }
+
+  const response = await sendMessageToContentScript({ type: 'REDETECT_INSTANCE_CONFIG' });
+
+  if (isSuccessResponse(response) && response.type === 'REDETECT_INSTANCE_CONFIG_RESPONSE') {
+    // Update inputs directly from response — storage is already updated by content script
+    const epicAvatarEl = document.getElementById('configEpicAvatar') as HTMLInputElement | null;
+    const storyAvatarEl = document.getElementById('configStoryAvatar') as HTMLInputElement | null;
+    const sprintFieldEl = document.getElementById('configSprintField') as HTMLInputElement | null;
+    const pointsFieldEl = document.getElementById('configPointsField') as HTMLInputElement | null;
+    const dot = document.getElementById('configStatusDot');
+
+    if (epicAvatarEl) { epicAvatarEl.value = response.epicAvatarId; epicAvatarEl.classList.remove('dimmed'); }
+    if (storyAvatarEl) { storyAvatarEl.value = response.storyAvatarId; storyAvatarEl.classList.remove('dimmed'); }
+    if (sprintFieldEl) { sprintFieldEl.value = response.sprintFieldId; sprintFieldEl.classList.remove('dimmed'); }
+    if (pointsFieldEl) { pointsFieldEl.value = response.storyPointsFieldId; pointsFieldEl.classList.remove('dimmed'); }
+    if (dot) { dot.classList.remove('defaults'); dot.classList.add('detected'); dot.title = 'Auto-detected from Jira API'; }
+  } else {
+    // Detection failed — reload from storage (may still have defaults)
+    await updateInstanceConfigUI();
+  }
+
+  // Re-enable button
+  if (btn) { btn.disabled = false; btn.textContent = 'Re-detect'; }
 }
 
 /**
@@ -770,7 +919,7 @@ function setupEventListeners(): void {
   });
 
   // Collapsible sections
-  document.querySelectorAll('.panel-toggle').forEach(btn => {
+  document.querySelectorAll('.panel-toggle, .domain-header').forEach(btn => {
     btn.addEventListener('click', () => {
       const targetId = btn.getAttribute('data-target');
       if (!targetId) return;
@@ -784,6 +933,26 @@ function setupEventListeners(): void {
   // Inactive state button
   const activateExtensionBtn = document.getElementById('activateExtension');
   activateExtensionBtn?.addEventListener('click', () => activateExtension());
+
+  // Instance config: re-detect button
+  const redetectBtn = document.getElementById('redetectConfig');
+  redetectBtn?.addEventListener('click', () => redetectInstanceConfig());
+
+  // Instance config: save on blur or Enter for editable fields
+  document.querySelectorAll('.config-input').forEach(input => {
+    const el = input as HTMLInputElement;
+    el.addEventListener('blur', () => saveInstanceConfigFromInputs());
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        el.blur(); // triggers save via blur handler
+      }
+    });
+    // Brief green flash on save
+    el.addEventListener('blur', () => {
+      el.classList.add('saved');
+      setTimeout(() => el.classList.remove('saved'), 600);
+    });
+  });
 
   // Active state domain management button
   const removeDomain = document.getElementById('removeDomain');
@@ -923,23 +1092,6 @@ function updateStatisticsUI(stats: ExtensionStatistics): void {
 
   if (processingTime) {
     processingTime.textContent = `${stats.processing.averageProcessingTimeMs.toFixed(1)}ms avg`;
-  }
-
-  // Badge stats
-  const leftPanelBadges = document.getElementById('leftPanelBadges');
-  const timelineBadges = document.getElementById('timelineBadges');
-  const sprintBadges = document.getElementById('sprintBadges');
-
-  if (leftPanelBadges) {
-    leftPanelBadges.textContent = String(stats.badges.leftPanelBadgesActive);
-  }
-
-  if (timelineBadges) {
-    timelineBadges.textContent = String(stats.badges.timelineBadgesActive);
-  }
-
-  if (sprintBadges) {
-    sprintBadges.textContent = String(stats.badges.sprintBadgesActive);
   }
 
   // Error stats

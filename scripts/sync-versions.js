@@ -35,5 +35,13 @@ manifestDistJson.version = targetVersion;
 fs.writeFileSync(manifestDistJsonPath, JSON.stringify(manifestDistJson, null, 2) + '\n');
 console.log(`✅ Updated manifest.dist.json: ${oldManifestDistVersion} → ${targetVersion}`);
 
+// Update popup.html version pill
+const popupHtmlPath = path.join(rootDir, 'src', 'popup', 'popup.html');
+let popupHtml = fs.readFileSync(popupHtmlPath, 'utf8');
+const versionPillRegex = /(<span class="version-pill">)[^<]+(<\/span>)/;
+popupHtml = popupHtml.replace(versionPillRegex, `$1${targetVersion}$2`);
+fs.writeFileSync(popupHtmlPath, popupHtml);
+console.log(`✅ Updated popup.html version pill → ${targetVersion}`);
+
 console.log('');
 console.log('All versions synchronized!');

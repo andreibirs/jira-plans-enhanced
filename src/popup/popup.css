@@ -28,46 +28,46 @@
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", system-ui, sans-serif;
 }
 
-/* ── Light Theme ────────────────────────── */
+/* ── Light Theme — Spectrum-inspired ─────── */
 html[data-theme="light"] {
-  --bg-base: #f4f4f8;
-  --bg-surface: #ffffff;
-  --bg-elevated: #ecedf2;
+  --bg-base: #f5f5f5;
+  --bg-surface: #fdfdfd;
+  --bg-elevated: #ebebeb;
   --bg-input: #ffffff;
-  --bg-hover: #e4e5ec;
-  --border: #d4d5de;
-  --border-subtle: #e8e9f0;
-  --text-1: #1c1d2b;
-  --text-2: #5a5b72;
-  --text-3: #9294a6;
-  --accent: #6366f1;
-  --accent-dim: rgba(99, 102, 241, 0.1);
-  --accent-strong: #4f46e5;
-  --green: #10b981;
-  --amber: #f59e0b;
-  --red: #ef4444;
-  --red-dim: rgba(239, 68, 68, 0.07);
+  --bg-hover: #e1e1e1;
+  --border: #d0d0d0;
+  --border-subtle: #e3e3e3;
+  --text-1: #1d1d1d;
+  --text-2: #5c5c5c;
+  --text-3: #909090;
+  --accent: #5c5ce0;
+  --accent-dim: rgba(92, 92, 224, 0.1);
+  --accent-strong: #4b4bcf;
+  --green: #12805c;
+  --amber: #c76f00;
+  --red: #d31510;
+  --red-dim: rgba(211, 21, 16, 0.07);
 }
 
 @media (prefers-color-scheme: light) {
   html[data-theme="system"] {
-    --bg-base: #f4f4f8;
-    --bg-surface: #ffffff;
-    --bg-elevated: #ecedf2;
+    --bg-base: #f5f5f5;
+    --bg-surface: #fdfdfd;
+    --bg-elevated: #ebebeb;
     --bg-input: #ffffff;
-    --bg-hover: #e4e5ec;
-    --border: #d4d5de;
-    --border-subtle: #e8e9f0;
-    --text-1: #1c1d2b;
-    --text-2: #5a5b72;
-    --text-3: #9294a6;
-    --accent: #6366f1;
-    --accent-dim: rgba(99, 102, 241, 0.1);
-    --accent-strong: #4f46e5;
-    --green: #10b981;
-    --amber: #f59e0b;
-    --red: #ef4444;
-    --red-dim: rgba(239, 68, 68, 0.07);
+    --bg-hover: #e1e1e1;
+    --border: #d0d0d0;
+    --border-subtle: #e3e3e3;
+    --text-1: #1d1d1d;
+    --text-2: #5c5c5c;
+    --text-3: #909090;
+    --accent: #5c5ce0;
+    --accent-dim: rgba(92, 92, 224, 0.1);
+    --accent-strong: #4b4bcf;
+    --green: #12805c;
+    --amber: #c76f00;
+    --red: #d31510;
+    --red-dim: rgba(211, 21, 16, 0.07);
   }
 }
 
@@ -235,15 +235,15 @@ body {
   transform: translateX(48px);
 }
 
-/* Light theme: use darker accent for the slider to contrast */
+/* Light theme: accent shadow for the slider */
 html[data-theme="light"] .theme-slider,
 html[data-theme="system"] .theme-slider {
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 8px rgba(92, 92, 224, 0.35);
 }
 
 @media (prefers-color-scheme: light) {
   html[data-theme="system"] .theme-slider {
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 2px 8px rgba(92, 92, 224, 0.35);
   }
 }
 
@@ -900,6 +900,141 @@ html[data-theme="system"] .theme-slider {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: right;
+}
+
+/* ── Domain Panel & Instance Config ───── */
+.domain-panel {
+  padding: 10px 16px 10px;
+}
+
+.domain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+
+.domain-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.domain-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.domain-header-info .mono {
+  font-size: 12px;
+}
+
+.config-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.config-status-dot.detected {
+  background: var(--green);
+  box-shadow: 0 0 5px rgba(52, 211, 153, 0.35);
+}
+
+.config-status-dot.defaults {
+  background: var(--amber);
+  box-shadow: 0 0 5px rgba(251, 191, 36, 0.25);
+}
+
+.toggle-chevron-sm {
+  color: var(--text-3);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.domain-header.open .toggle-chevron-sm {
+  transform: rotate(90deg);
+}
+
+.domain-panel .collapsible-body {
+  margin-top: 0;
+}
+
+.config-table {
+  padding: 8px 0 4px;
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
+.config-key {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.config-input {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 1px 4px;
+  text-align: right;
+  width: 140px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.config-input:hover {
+  border-color: var(--border);
+}
+
+.config-input:focus {
+  border-color: var(--accent);
+  background: var(--bg-input);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.config-input.dimmed {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.config-input.saved {
+  border-color: var(--green);
+  transition: border-color 0s;
+}
+
+.config-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.config-actions .btn-compact-sm,
+.config-actions .btn-danger-text {
+  flex: 1;
+}
+
+.btn-compact-sm {
+  padding: 5px 10px;
+  font-size: 10px;
 }
 
 /* ── Domain Footer ─────────────────────── */

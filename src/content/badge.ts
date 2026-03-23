@@ -8,6 +8,8 @@
 
 import { AssigneeInfo } from '../shared/types';
 import { createAvatarBadge } from './avatar-badge';
+import { STYLES } from './badge-styles';
+import { findTimelineBar } from './dom-parser';
 
 export const BADGE_CLASS = 'jira-plans-headcount-badge';
 export const TIMELINE_BADGE_CLASS = 'jira-plans-timeline-badge';
@@ -82,16 +84,8 @@ export function createBadge(count: number, isExpanded: boolean, epicKey?: string
     badge.title = `${count} unique ${count === 1 ? 'engineer' : 'engineers'} working on this epic`;
   }
 
-  // Apply styling to match Jira theme - margin RIGHT since it's BEFORE the epic key
-  badge.style.marginRight = '8px';
-  badge.style.padding = '2px 6px';
-  badge.style.backgroundColor = '#e0e0e0';
-  badge.style.borderRadius = '4px';
-  badge.style.fontSize = '11px';
-  badge.style.fontWeight = 'bold';
-  badge.style.color = '#333';
-  badge.style.display = 'inline-block';
-  badge.style.verticalAlign = 'middle';
+  // Styling applied via CSS class from badge-styles.ts
+  badge.classList.add(STYLES.badge);
 
   return badge;
 }
@@ -233,29 +227,8 @@ export function createTimelineBadge(
       badge.title = 'No assignees';
     }
 
-    // Basic styling for loading/zero states
-    badge.style.cssText = `
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      padding: 2px 6px;
-      background-color: rgba(0, 0, 0, 0.6);
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: bold;
-      color: #fff;
-      display: inline-block;
-      pointer-events: auto;
-      z-index: 2;
-      min-width: 18px;
-      max-width: 90%;
-      cursor: help;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    `;
+    // Base styling via CSS class
+    badge.classList.add(STYLES.timelineBadge);
 
     return badge;
   }
@@ -272,17 +245,7 @@ export function createTimelineBadge(
       showTooltip: true,
     });
 
-    badge.style.cssText = `
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: auto;
-      z-index: 2;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
+    badge.classList.add(STYLES.timelineBadge, STYLES.timelineBadgeAvatars);
 
     badge.appendChild(avatarBadge);
   } else {
@@ -298,28 +261,9 @@ export function createTimelineBadge(
       badge.title = `Total: ${engineersText}`;
     }
 
-    badge.style.cssText = `
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      padding: 2px 6px;
-      background-color: rgba(0, 0, 0, 0.6);
-      border-radius: 3px;
-      font-size: ${timelineBadgeFontSize(text)};
-      font-weight: bold;
-      color: #fff;
-      display: inline-block;
-      pointer-events: auto;
-      z-index: 2;
-      min-width: 18px;
-      max-width: 90%;
-      cursor: help;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    `;
+    badge.classList.add(STYLES.timelineBadge);
+    // Dynamic font-size override based on text length
+    badge.style.fontSize = timelineBadgeFontSize(text);
   }
 
   return badge;
@@ -341,27 +285,7 @@ export function injectTimelineBadge(
   displayMode: 'count' | 'avatars' | 'personweeks' = 'count',
   avatarOptions?: { maxVisible?: number; size?: number }
 ): boolean {
-  // Find timeline bar by data-name pattern
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
-  // Note: [data-issue] exists in both left panel (scope-issue) and timeline area
-  // We need the timeline area row, which does NOT have data-name^="scope-issue-"
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = row.getAttribute('data-name');
-      // Skip the epic row (has data-name="scope-issue-...")
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      // This should be the timeline row
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
+  const timelineBar = findTimelineBar(issueId);
 
   if (!timelineBar) {
     return false;
@@ -388,25 +312,7 @@ export function injectTimelineBadge(
  * Update an existing timeline badge
  */
 export function updateTimelineBadge(issueId: string, count: number, assignees?: AssigneeInfo[]): boolean {
-  // Find timeline bar by data-name pattern
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = row.getAttribute('data-name');
-      // Skip the epic row (has data-name="scope-issue-...")
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      // This should be the timeline row
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
+  const timelineBar = findTimelineBar(issueId);
 
   if (!timelineBar) {
     return false;
@@ -476,26 +382,12 @@ export function createSprintBadge(
       badge.title = isNoSprint ? 'Stories not assigned to sprints: No assignees' : `${sprintName}: No assignees`;
     }
 
-    // Use orange/warning color for no-sprint badges
-    const backgroundColor = isNoSprint ? 'rgba(255, 152, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)';
-
-    badge.style.cssText = `
-      position: absolute;
-      left: ${positionPercent}%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      padding: 2px 6px;
-      background-color: ${backgroundColor};
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: bold;
-      color: #fff;
-      display: inline-block;
-      pointer-events: auto;
-      z-index: ${isNoSprint ? 3 : 2};
-      min-width: ${isNoSprint ? '24px' : '18px'};
-      text-align: center;
-    `;
+    badge.classList.add(STYLES.timelineBadge);
+    if (isNoSprint) {
+      badge.classList.add(STYLES.timelineBadgeWarning);
+    }
+    // Dynamic position override
+    badge.style.left = `${positionPercent}%`;
 
     return badge;
   }
@@ -518,9 +410,6 @@ export function createSprintBadge(
     tooltipText = isNoSprint ? `⚠ Stories not assigned to sprints: ${engineersText}` : `${sprintName}: ${engineersText}`;
   }
 
-  // Use orange/warning color for no-sprint badges
-  const backgroundColor = isNoSprint ? 'rgba(255, 152, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)';
-
   // Create badge content based on display mode (but always show warning badges as count+icon)
   if (!isNoSprint && displayMode === 'avatars' && assignees && assignees.length > 0) {
     // Avatar mode: show profile pictures
@@ -531,17 +420,9 @@ export function createSprintBadge(
       showTooltip: false,
     });
 
-    badge.style.cssText = `
-      position: absolute;
-      left: ${positionPercent}%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: auto;
-      z-index: 2;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
+    badge.classList.add(STYLES.timelineBadge, STYLES.timelineBadgeAvatars);
+    // Dynamic position override
+    badge.style.left = `${positionPercent}%`;
 
     badge.appendChild(avatarBadge);
     badge.title = tooltipText;
@@ -551,28 +432,13 @@ export function createSprintBadge(
     badge.textContent = text;
     badge.title = tooltipText;
 
-    badge.style.cssText = `
-      position: absolute;
-      left: ${positionPercent}%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      padding: 2px 6px;
-      background-color: ${backgroundColor};
-      border-radius: 3px;
-      font-size: ${timelineBadgeFontSize(text)};
-      font-weight: bold;
-      color: #fff;
-      display: inline-block;
-      pointer-events: auto;
-      z-index: ${isNoSprint ? 3 : 2};
-      min-width: ${isNoSprint ? '24px' : '18px'};
-      max-width: 90%;
-      cursor: help;
-      text-align: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    `;
+    badge.classList.add(STYLES.timelineBadge);
+    if (isNoSprint) {
+      badge.classList.add(STYLES.timelineBadgeWarning);
+    }
+    // Dynamic overrides: position and adaptive font-size
+    badge.style.left = `${positionPercent}%`;
+    badge.style.fontSize = timelineBadgeFontSize(text);
   }
 
   return badge;
@@ -582,25 +448,7 @@ export function createSprintBadge(
  * Clear all timeline badges from a bar
  */
 export function clearTimelineBadges(issueId: string): void {
-  // Find timeline bar by data-name pattern
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = row.getAttribute('data-name');
-      // Skip the epic row (has data-name="scope-issue-...")
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      // This should be the timeline row
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
+  const timelineBar = findTimelineBar(issueId);
 
   if (!timelineBar) {
     return;
@@ -628,25 +476,7 @@ export function injectSprintBadges(
   displayMode: 'count' | 'avatars' | 'personweeks' = 'count',
   avatarOptions?: { maxVisible?: number }
 ): boolean {
-  // Find timeline bar by data-name pattern
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = row.getAttribute('data-name');
-      // Skip the epic row (has data-name="scope-issue-...")
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      // This should be the timeline row
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
+  const timelineBar = findTimelineBar(issueId);
 
   if (!timelineBar) {
     return false;
@@ -677,22 +507,7 @@ export function injectSprintBadges(
  * If no avatar URL is available, falls back to colored initials.
  */
 export function injectStoryAvatar(issueId: string, assignee: AssigneeInfo): boolean {
-  // Find timeline bar for this story
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = row.getAttribute('data-name');
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
+  const timelineBar = findTimelineBar(issueId);
 
   if (!timelineBar) {
     return false;
@@ -719,15 +534,8 @@ export function injectStoryAvatar(issueId: string, assignee: AssigneeInfo): bool
   // Wrap in a positioned container
   const wrapper = document.createElement('div');
   wrapper.className = STORY_AVATAR_CLASS;
+  wrapper.classList.add(STYLES.storyAvatar);
   wrapper.setAttribute('data-issue-id', issueId);
-  wrapper.style.cssText = `
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: auto;
-    z-index: 2;
-  `;
   wrapper.appendChild(avatarBadge);
 
   timelineBar.appendChild(wrapper);
@@ -741,22 +549,7 @@ export function injectStoryAvatar(issueId: string, assignee: AssigneeInfo): bool
  * Shows "⚠ No estimate" in orange for stories without effort data.
  */
 export function injectStoryPwBadge(issueId: string, detail: { effort: number; effortUnit: 'sp' | 'pd'; personPw: number } | null): boolean {
-  // Find timeline bar for this story
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = row.getAttribute('data-name');
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
+  const timelineBar = findTimelineBar(issueId);
 
   if (!timelineBar) {
     return false;
@@ -791,7 +584,10 @@ export function injectStoryPwBadge(issueId: string, detail: { effort: number; ef
     badge.title = `${detail.effort} ${effortDesc} — assignee totals ${detail.personPw} person-week${detail.personPw === 1 ? '' : 's'}`;
   }
 
-  const bgColor = isUnestimated ? 'rgba(255, 152, 0, 0.85)' : 'rgba(100, 50, 150, 0.75)';
+  // Base styling via CSS classes; dynamic font-size/padding overrides below
+  badge.classList.add(STYLES.timelineBadge);
+  badge.classList.add(isUnestimated ? STYLES.storyPwUnestimated : STYLES.storyPwEstimated);
+
   const barWidth = timelineBar.getBoundingClientRect().width;
   const textLen = badge.textContent?.length || 0;
   // ~6px per char at 9px font — scale down if badge would exceed bar width
@@ -800,28 +596,16 @@ export function injectStoryPwBadge(issueId: string, detail: { effort: number; ef
   if (barWidth > 0 && estimatedBadgeWidth > barWidth) {
     fontSize = Math.max(6, Math.floor(9 * barWidth / estimatedBadgeWidth));
   }
-  badge.style.cssText = `
-    padding: 1px ${fontSize >= 8 ? 5 : 3}px;
-    background-color: ${bgColor};
-    border-radius: 3px;
-    font-size: ${fontSize}px;
-    font-weight: bold;
-    color: #fff;
-    white-space: nowrap;
-    cursor: help;
-  `;
+  // Dynamic overrides that depend on runtime measurements
+  badge.style.fontSize = `${fontSize}px`;
+  badge.style.padding = `1px ${fontSize >= 8 ? 5 : 3}px`;
 
-  wrapper.style.cssText = `
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    z-index: 2;
-  `;
+  wrapper.classList.add(STYLES.storyAvatar);
+  // PW wrapper uses flex layout and disables pointer-events on wrapper (enabled on badge)
+  wrapper.style.display = 'flex';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.justifyContent = 'center';
+  wrapper.style.pointerEvents = 'none';
 
   badge.style.pointerEvents = 'auto';
 

@@ -26,22 +26,18 @@ export interface EpicData {
 }
 
 /**
- * Check if a row is an epic (not a story)
- *
- * Epics have avatarId=18807 in their issue type icon background-image
- * Stories have avatarId=18815
- *
- * Using [style*="avatarId"] instead of class name for stability
+ * Check if a row matches a specific issue type by avatarId.
+ * Supports both Server/DC format (avatarId= in query params) and
+ * Cloud format (/avatar/{id} in path).
  */
-function isEpicRow(row: HTMLElement): boolean {
-  // More resilient: use style attribute instead of minified class name
-  const iconElement = row.querySelector('[style*="avatarId"]') as HTMLElement;
+function isIssueTypeRow(row: HTMLElement, avatarId: string): boolean {
+  const iconElement = row.querySelector('[style*="avatarId"], [style*="/avatar/"]') as HTMLElement;
   if (!iconElement) {
     return false;
   }
 
   const backgroundImage = iconElement.style.backgroundImage;
-  return backgroundImage.includes('avatarId=18807');
+  return backgroundImage.includes(`avatarId=${avatarId}`) || backgroundImage.includes(`/avatar/${avatarId}`);
 }
 
 /**
@@ -50,27 +46,14 @@ function isEpicRow(row: HTMLElement): boolean {
  * Epic rows are identified by:
  * - data-issue attribute (contains issue ID)
  * - data-name attribute starting with "scope-issue-"
- * - Issue type icon with avatarId=18807 (epic avatar)
- */
-export function findEpicRows(): HTMLElement[] {
-  const allRows = document.querySelectorAll('[data-issue][data-name^="scope-issue-"]');
-  const epicRows = Array.from(allRows).filter(row => isEpicRow(row as HTMLElement));
-  return epicRows as HTMLElement[];
-}
-
-/**
- * Check if a row is a story (not an epic)
+ * - Issue type icon with the epic avatar ID
  *
- * Stories have avatarId=18815 in their issue type icon background-image
+ * @param epicAvatarId - Avatar ID for epics (auto-detected or default '18807')
  */
-function isStoryRow(row: HTMLElement): boolean {
-  const iconElement = row.querySelector('[style*="avatarId"]') as HTMLElement;
-  if (!iconElement) {
-    return false;
-  }
-
-  const backgroundImage = iconElement.style.backgroundImage;
-  return backgroundImage.includes('avatarId=18815');
+export function findEpicRows(epicAvatarId: string = '18807'): HTMLElement[] {
+  const allRows = document.querySelectorAll('[data-issue][data-name^="scope-issue-"]');
+  const epicRows = Array.from(allRows).filter(row => isIssueTypeRow(row as HTMLElement, epicAvatarId));
+  return epicRows as HTMLElement[];
 }
 
 /**
@@ -79,23 +62,50 @@ function isStoryRow(row: HTMLElement): boolean {
  * Story rows are identified by:
  * - data-issue attribute (contains issue ID)
  * - data-name attribute starting with "scope-issue-"
- * - Issue type icon with avatarId=18815 (story avatar)
+ * - Issue type icon with the story avatar ID
+ *
+ * @param storyAvatarId - Avatar ID for stories (auto-detected or default '18815')
  */
-export function findStoryRows(): HTMLElement[] {
+export function findStoryRows(storyAvatarId: string = '18815'): HTMLElement[] {
   const allRows = document.querySelectorAll('[data-issue][data-name^="scope-issue-"]');
-  const storyRows = Array.from(allRows).filter(row => isStoryRow(row as HTMLElement));
+  const storyRows = Array.from(allRows).filter(row => isIssueTypeRow(row as HTMLElement, storyAvatarId));
   return storyRows as HTMLElement[];
 }
 
 /**
- * Extract assignee information from visible rows
+ * Find the timeline bar element for a given issue ID
  *
- * Strategy:
- * For now, count ALL unique assignees across ALL visible rows.
- * This is a simplified approach - we'll refine epic/story hierarchy later.
+ * Searches for the bar using two strategies:
+ * 1. Direct match via data-name="issue-bar-{issueId}"
+ * 2. Fallback: find rows with data-issue="{issueId}" (excluding scope-issue rows)
+ *    and look for a child element with data-name starting with "issue-bar-"
+ */
+export function findTimelineBar(issueId: string): HTMLElement | null {
+  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
+  if (!timelineBar) {
+    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
+    for (const row of allRows) {
+      const dataName = row.getAttribute('data-name');
+      if (dataName && dataName.startsWith('scope-issue-')) {
+        continue;
+      }
+      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
+      if (timelineBar) {
+        break;
+      }
+    }
+  }
+  return timelineBar;
+}
+
+/**
+ * Extract assignee information for a specific epic row
+ *
+ * Scoped to the epic's issue ID - only counts assignees from cells
+ * belonging to this specific issue.
  *
  * Assignees are in separate cells with:
- * - data-issue attribute (correlates with row)
+ * - data-issue attribute matching the epic's issue ID
  * - data-name starting with "cell-"
  * - <span class="_2v7GN"> containing assignee name
  */
@@ -107,11 +117,13 @@ export function extractAssignees(epicRow: HTMLElement): AssigneeData {
 
   const uniqueUsers = new Set<string>();
 
-  // Find all assignee cells (for ALL issues, not just this epic)
-  // This is a simplified implementation - we'll add hierarchy later
-  const assigneeCells = document.querySelectorAll('[data-issue][data-name^="cell-"]');
+  // Find assignee cells scoped to this specific epic's issue ID
+  const assigneeCells = document.querySelectorAll(`[data-issue="${issueId}"][data-name^="cell-"]`);
 
   assigneeCells.forEach(cell => {
+    // NOTE: ._2v7GN is a minified Jira class name that may change between Jira versions.
+    // This is a known fragility -- the API path (fetchAccurateCount) is the primary
+    // data source; this DOM-based extraction is a fallback for initial display.
     const assigneeSpan = cell.querySelector('._2v7GN');
     if (assigneeSpan) {
       const assigneeName = assigneeSpan.textContent?.trim();

@@ -83,7 +83,7 @@ async function injectIntoExistingTabs(domain: string, pattern: string): Promise<
     console.log(`[Inject Existing] Found ${tabs.length} total tabs`);
 
     // Convert match pattern to regex
-    // Pattern is like "*://jira.corp.adobe.com/jira/software/c/*/plans*"
+    // Pattern is like "*://jira.example.com/jira/software/c/*/plans*"
     // IMPORTANT: Escape special chars BEFORE replacing * with .*
     const patternRegex = pattern
       .replace(/\./g, '\\.')  // Escape dots FIRST

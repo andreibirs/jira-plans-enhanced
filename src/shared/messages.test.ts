@@ -30,6 +30,11 @@ describe('Messages', () => {
       expect(isPopupRequest(validRequest)).toBe(true);
     });
 
+    it('should validate REDETECT_INSTANCE_CONFIG request', () => {
+      const validRequest = { type: 'REDETECT_INSTANCE_CONFIG' };
+      expect(isPopupRequest(validRequest)).toBe(true);
+    });
+
     it('should reject invalid request types', () => {
       const invalidRequest = { type: 'INVALID_TYPE' };
       expect(isPopupRequest(invalidRequest)).toBe(false);

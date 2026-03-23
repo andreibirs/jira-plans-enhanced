@@ -8,109 +8,35 @@
  * - Update badges when epics expand/collapse
  */
 
-import { findEpicRows, findStoryRows, extractEpicData } from './dom-parser';
+import { findEpicRows, findStoryRows, extractEpicData, findTimelineBar } from './dom-parser';
 import { injectSprintBadges, injectTimelineBadge, injectBadge, updateBadge, countBadges, clearAllBadges, clearTimelineBadges, clearAllStoryAvatars, injectStoryAvatar, injectStoryPwBadge, BADGE_CLASS, TIMELINE_BADGE_CLASS, STORY_AVATAR_CLASS } from './badge';
-import { getSprintLayout, getOverlappingSprints, calculateBadgePosition, SprintSegment, normalizeSprintName } from './sprint-layout';
+import { getSprintLayout, getOverlappingSprints, calculateBadgePosition, normalizeSprintName } from './sprint-layout';
 import { ExtensionSettings, DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, mergeWithDefaults } from '../shared/settings';
 import { ExtensionStatistics, INITIAL_STATISTICS, calculateHitRate } from '../shared/statistics';
 import { PopupRequest, PopupResponse, isPopupRequest } from '../shared/messages';
 import { AssigneeInfo } from '../shared/types';
+import type { PersonEffort } from './cache';
+import { cache, assigneeCountCache, inflightRequests, sprintLayoutCache, storyAssigneeCache, storyPwDetailCache, isCacheExpired, evictOldestCacheEntry } from './cache';
+import { PwSettings, buildPwOverride, personEffortToPw, parseSprint } from './person-weeks';
+import { injectBadgeStyles } from './badge-styles';
+import { getIssueTypeAvatars, IssueTypeAvatars } from './issue-types';
+import { getCustomFieldIds, CustomFieldIds } from './custom-fields';
 
 export interface ProcessResult {
   processed: number;
   injected: number;
 }
 
-// Effort per person per sprint — tracks SP and PD separately for correct threshold application
-interface PersonEffort {
-  sp: number;
-  pd: number;
-}
-
-// Cache for API results — keyed by epicKey (e.g., "PROJ-123")
-interface CachedAssigneeData {
-  totalCount: number;
-  sprintCounts: Map<string, number>;
-  timestamp: number;
-  unscheduledStories?: string[];
-  sprintAssignees: Map<string, AssigneeInfo[]>;
-  totalAssignees: AssigneeInfo[];
-  effortPerPersonPerSprint: Map<string, Map<string, PersonEffort>>;       // last sprint → (userId → effort)
-  effortPerPersonCurrentSprints: Map<string, Map<string, PersonEffort>>;  // ACTIVE/FUTURE → (userId → effort)
-  estimatedStoryCount: number;
-  totalStoryCount: number;
-  epicEstimate?: { sp: number | null; pd: number | null }; // Epic's own SP/days for direct PW
-}
-const assigneeCountCache = new Map<string, CachedAssigneeData>();
-
-// Track which epics we're currently fetching to avoid duplicate requests
-const inflightRequests = new Set<string>();
-
-// Cache sprint layouts per team (key: teamId, value: sprint segments)
-const sprintLayoutCache = new Map<string, SprintSegment[]>();
-
-// Cache story-level assignee data (key: story issueId, value: AssigneeInfo)
-// Populated during epic API fetches, consumed by processStories()
-const storyAssigneeCache = new Map<string, AssigneeInfo>();
-
-// Per-story PW detail — references into epic cache for dynamic threshold recomputation
-interface StoryPwDetail {
-  effort: number;           // SP value or person-days
-  effortUnit: 'sp' | 'pd'; // Which field the effort came from
-  userId: string;
-  epicKey: string;
-  lastSprint: string;
-  currentSprint: string;
-}
-const storyPwDetailCache = new Map<string, StoryPwDetail | null>();
-
 // Current settings and statistics
 let currentSettings: ExtensionSettings = DEFAULT_SETTINGS;
+let issueTypeAvatars: IssueTypeAvatars = { epicAvatarId: '18807', storyAvatarId: '18815', fetchedAt: 0 };
+let customFieldIds: CustomFieldIds = { sprintFieldId: 'customfield_11002', storyPointsFieldId: 'customfield_10003', fetchedAt: 0 };
 const statistics: ExtensionStatistics = { ...INITIAL_STATISTICS };
 const processingTimes: number[] = []; // Track last 100 processing times for average
 
 // Track if ResizeObserver has been set up
 let resizeObserverSetup = false;
 let resizeObserver: ResizeObserver | null = null;
-
-/**
- * CRITICAL: Check if cache entry has expired based on TTL
- */
-function isCacheExpired(epicKey: string): boolean {
-  const cached = assigneeCountCache.get(epicKey);
-  if (!cached) return true;
-
-  const age = Date.now() - cached.timestamp;
-  return age > currentSettings.performance.cacheTtlMs;
-}
-
-/**
- * CRITICAL: Evict oldest cache entry when cache exceeds max size
- * Uses LRU (Least Recently Used) eviction policy
- */
-function evictOldestCacheEntry(): void {
-  if (assigneeCountCache.size <= currentSettings.performance.maxCacheEntries) {
-    return;
-  }
-
-  let oldestKey: string | null = null;
-  let oldestTimestamp = Date.now();
-
-  for (const [key, data] of assigneeCountCache.entries()) {
-    if (data.timestamp < oldestTimestamp) {
-      oldestTimestamp = data.timestamp;
-      oldestKey = key;
-    }
-  }
-
-  if (oldestKey) {
-    assigneeCountCache.delete(oldestKey);
-    statistics.cache.totalEntries--;
-    if (currentSettings.debug.enableDebugMode) {
-      console.log(`[Headcount] Evicted oldest cache entry: ${oldestKey}`);
-    }
-  }
-}
 
 /**
  * Update cache statistics and badge counts
@@ -269,119 +195,16 @@ async function loadSettings(): Promise<void> {
 }
 
 /**
- * Build display override for PW mode badges
- * Shows "X PW" when remaining == total, or "X PW left (Y total)" otherwise
+ * Helper to build PwSettings from current extension settings
  */
-function buildPwOverride(cachedData: CachedAssigneeData): { text: string; tooltip: string } | undefined {
-  if (currentSettings.appearance.badgeDisplayMode !== 'personweeks') return undefined;
-
-  const { total, remaining, epicLevel } = computePersonWeeks(cachedData);
-
-  if (epicLevel) {
-    // Epic-level PW: show direct estimate with source indicator
-    const est = cachedData.epicEstimate!;
-    const source = (est.sp && est.sp > 0) ? `${est.sp} SP` : `${est.pd} days`;
-    const text = `${total} PW`;
-    const tooltip = `${total} person-weeks (epic estimate: ${source})`;
-    return { text, tooltip };
-  }
-
-  const { estimatedStoryCount, totalStoryCount, totalCount } = cachedData;
-  const allEstimated = estimatedStoryCount >= totalStoryCount;
-  const estimationNote = allEstimated ? '' : `, ${estimatedStoryCount}/${totalStoryCount}`;
-
-  let text: string;
-  if (remaining === total) {
-    // No completed sprints — just show total
-    text = `${total} PW${estimationNote ? ` (${estimatedStoryCount}/${totalStoryCount})` : ''}`;
-  } else {
-    text = `${remaining} PW left (${total} total${estimationNote})`;
-  }
-
-  const tooltip = `${remaining} person-weeks remaining, ${total} total (${totalCount} engineers, ${totalStoryCount} stories${allEstimated ? '' : `, ${estimatedStoryCount} estimated`})`;
-  return { text, tooltip };
+function getPwSettings(): PwSettings {
+  return {
+    badgeDisplayMode: currentSettings.appearance.badgeDisplayMode,
+    spThresholdPerPw: currentSettings.appearance.spThresholdPerPw,
+    pdThresholdPerPw: currentSettings.appearance.pdThresholdPerPw,
+    pwSource: currentSettings.appearance.pwSource,
+  };
 }
-
-/**
- * Convert effort to person-weeks using the appropriate threshold
- * SP uses spThresholdPerPw, person-days uses pdThresholdPerPw
- * ≤threshold = 1 PW, >threshold = 2 PW, no effort = 0 PW
- */
-function effortToPersonWeeks(effort: number | null | undefined, unit: 'sp' | 'pd' = 'sp'): number {
-  if (!effort || effort <= 0) return 0;
-  const threshold = unit === 'pd'
-    ? currentSettings.appearance.pdThresholdPerPw
-    : currentSettings.appearance.spThresholdPerPw;
-  return effort <= threshold ? 1 : 2;
-}
-
-/**
- * Convert a PersonEffort to PW — uses whichever field is populated (SP preferred over PD)
- * A person can only contribute max 2 PW per sprint regardless of mixed sources
- */
-function personEffortToPw(effort: PersonEffort): number {
-  const spPw = effortToPersonWeeks(effort.sp, 'sp');
-  const pdPw = effortToPersonWeeks(effort.pd, 'pd');
-  return Math.min(Math.max(spPw, pdPw), 2);
-}
-
-/**
- * Compute person-weeks from cached per-person-per-sprint effort data
- * Returns total PW (all sprints) and remaining PW (active/future only)
- * Uses current threshold settings so changes are reflected immediately
- */
-function computePersonWeeks(cachedData: CachedAssigneeData): { total: number; remaining: number; epicLevel: boolean } {
-  // Epic-level PW: epic's own SP/days used as PW (1 SP = 1 PW, 5 days = 1 PW)
-  const src = currentSettings.appearance.pwSource;
-  if (src !== 'stories' && cachedData.epicEstimate) {
-    // 'epic' = always use epic estimate; 'epic-fallback' = use epic if present, else fall through to stories
-    const epicPw = (cachedData.epicEstimate.sp && cachedData.epicEstimate.sp > 0)
-      ? Math.ceil(cachedData.epicEstimate.sp)
-      : Math.ceil((cachedData.epicEstimate.pd || 0) / 5);
-    return { total: epicPw, remaining: epicPw, epicLevel: true };
-  }
-  if (src === 'epic' && !cachedData.epicEstimate) {
-    // Epic mode but no estimate on the epic — show 0
-    return { total: 0, remaining: 0, epicLevel: true };
-  }
-
-  // Story-level PW: aggregate per-person-per-sprint effort
-  let total = 0;
-  for (const effortPerPerson of cachedData.effortPerPersonPerSprint.values()) {
-    for (const effort of effortPerPerson.values()) {
-      total += personEffortToPw(effort);
-    }
-  }
-  let remaining = 0;
-  for (const effortPerPerson of cachedData.effortPerPersonCurrentSprints.values()) {
-    for (const effort of effortPerPerson.values()) {
-      remaining += personEffortToPw(effort);
-    }
-  }
-  return { total, remaining, epicLevel: false };
-}
-
-/**
- * Parse sprint name and state from Jira's sprint field format
- * Format: "com.atlassian.greenhopper.service.sprint.Sprint@hash[id=209802,rapidViewId=45164,state=ACTIVE,name=Sprint 45,...]"
- */
-function parseSprint(sprintStr: string): { name: string; state: string } | null {
-  if (typeof sprintStr !== 'string') {
-    return null;
-  }
-
-  const nameMatch = sprintStr.match(/name=([^,\]]+)/);
-  const stateMatch = sprintStr.match(/state=([^,\]]+)/);
-  if (nameMatch && nameMatch[1]) {
-    return {
-      name: nameMatch[1].trim(),
-      state: stateMatch ? stateMatch[1].trim() : 'UNKNOWN',
-    };
-  }
-
-  return null;
-}
-
 
 /**
  * Process all epic rows on the page and inject/update badges
@@ -389,7 +212,7 @@ function parseSprint(sprintStr: string): { name: string; state: string } | null 
 export function processEpics(): ProcessResult {
   const startTime = performance.now();
 
-  const epicRows = findEpicRows();
+  const epicRows = findEpicRows(issueTypeAvatars.epicAvatarId);
   let processed = 0;
   let injected = 0;
 
@@ -411,8 +234,8 @@ export function processEpics(): ProcessResult {
       const cachedData = assigneeCountCache.get(epicKey);
 
       // CRITICAL: Check if cache is expired or missing
-      if (!cachedData || isCacheExpired(epicKey)) {
-        if (cachedData && isCacheExpired(epicKey)) {
+      if (!cachedData || isCacheExpired(epicKey, currentSettings.performance.cacheTtlMs)) {
+        if (cachedData && isCacheExpired(epicKey, currentSettings.performance.cacheTtlMs)) {
           // Cache expired - remove it
           assigneeCountCache.delete(epicKey);
           statistics.cache.totalEntries--;
@@ -432,7 +255,7 @@ export function processEpics(): ProcessResult {
         // Inject or update left panel badge (next to epic key)
         if (currentSettings.display.showLeftPanelBadges) {
           if (cachedData.totalCount > 0 || currentSettings.display.showZeroCountBadges) {
-            const pwOverride = buildPwOverride(cachedData);
+            const pwOverride = buildPwOverride(cachedData, getPwSettings());
             if (!injectBadge(epicRow, cachedData.totalCount, true, epicKey, pwOverride)) {
               updateBadge(epicRow, cachedData.totalCount, true, epicKey, pwOverride);
             }
@@ -508,7 +331,7 @@ function processStories(): void {
 
   const isPwMode = currentSettings.appearance.badgeDisplayMode === 'personweeks';
 
-  const storyRows = findStoryRows();
+  const storyRows = findStoryRows(issueTypeAvatars.storyAvatarId);
 
   for (const storyRow of storyRows) {
     const issueId = storyRow.getAttribute('data-issue');
@@ -524,7 +347,7 @@ function processStories(): void {
           // Compute person's PW dynamically using current threshold and per-sprint effort (last sprint)
           const cachedEpic = assigneeCountCache.get(detail.epicKey);
           const personEffort = cachedEpic?.effortPerPersonPerSprint?.get(detail.lastSprint)?.get(detail.userId);
-          const personPw = personEffort ? personEffortToPw(personEffort) : 0;
+          const personPw = personEffort ? personEffortToPw(personEffort, currentSettings.appearance.spThresholdPerPw, currentSettings.appearance.pdThresholdPerPw) : 0;
           injectStoryPwBadge(issueId, { effort: detail.effort, effortUnit: detail.effortUnit, personPw });
         }
       }
@@ -552,27 +375,7 @@ function isSprintView(): boolean {
  */
 function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<string, number>, totalCount: number, unscheduledStories?: string[], sprintAssignees?: Map<string, AssigneeInfo[]>): void {
   // Find the timeline bar to get its position
-  let timelineBar = document.querySelector(`[data-name="issue-bar-${issueId}"]`) as HTMLElement;
-
-  // Fallback: if not found (e.g., issue-bar-undefined), try finding via parent in stream area
-  // Note: [data-issue] exists in both left panel (scope-issue) and timeline area
-  // We need the timeline area row, which does NOT have data-name^="scope-issue-"
-  if (!timelineBar) {
-    const allRows = document.querySelectorAll(`[data-issue="${issueId}"]`);
-    for (const row of allRows) {
-      const dataName = (row as HTMLElement).getAttribute('data-name');
-      // Skip the epic row (has data-name="scope-issue-...")
-      if (dataName && dataName.startsWith('scope-issue-')) {
-        continue;
-      }
-      // This should be the timeline row
-      timelineBar = row.querySelector('[data-name^="issue-bar-"]') as HTMLElement;
-      if (timelineBar) {
-        break;
-      }
-    }
-  }
-
+  const timelineBar = findTimelineBar(issueId);
   if (!timelineBar) {
     return;
   }
@@ -587,31 +390,14 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
     if (!cachedData) return;
 
     clearTimelineBadges(issueId);
-    const { total, remaining, epicLevel } = computePersonWeeks(cachedData);
-
-    let badgeText: string;
-    let badgeTooltip: string;
-    if (epicLevel) {
-      const est = cachedData.epicEstimate!;
-      const source = (est.sp && est.sp > 0) ? `${est.sp} SP` : `${est.pd} days`;
-      badgeText = `${total} PW`;
-      badgeTooltip = `${total} person-weeks (epic estimate: ${source})`;
-    } else {
-      const allEstimated = cachedData.estimatedStoryCount >= cachedData.totalStoryCount;
-      const estimationNote = allEstimated ? '' : `, ${cachedData.estimatedStoryCount}/${cachedData.totalStoryCount}`;
-      if (remaining === total) {
-        badgeText = `${total} PW${estimationNote ? ` (${cachedData.estimatedStoryCount}/${cachedData.totalStoryCount})` : ''}`;
-      } else {
-        badgeText = `${remaining} PW left (${total} total${estimationNote})`;
-      }
-      badgeTooltip = `${remaining} person-weeks remaining, ${total} total (${totalCount} engineers, ${cachedData.totalStoryCount} stories${allEstimated ? '' : `, ${cachedData.estimatedStoryCount} estimated`})`;
-    }
+    const pwOverride = buildPwOverride(cachedData, getPwSettings());
+    if (!pwOverride) return;
 
     const badge = document.createElement('span');
     badge.className = TIMELINE_BADGE_CLASS;
-    badge.textContent = badgeText;
-    badge.title = badgeTooltip;
-    const fontSize = badgeText.length <= 4 ? '10px' : badgeText.length <= 10 ? '9px' : '8px';
+    badge.textContent = pwOverride.text;
+    badge.title = pwOverride.tooltip;
+    const fontSize = pwOverride.text.length <= 4 ? '10px' : pwOverride.text.length <= 10 ? '9px' : '8px';
     badge.style.cssText = `
       position: absolute;
       left: 50%;
@@ -813,6 +599,11 @@ function updateTimelineBadgesWithSprints(issueId: string, sprintCounts: Map<stri
  */
 /* istanbul ignore next */
 async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId: string): Promise<void> {
+  // Skip invalid keys (e.g. uncommitted epics showing just "GS" without a number)
+  if (!/^[A-Z][A-Z0-9]+-\d+$/.test(epicKey)) {
+    return;
+  }
+
   // Mark as inflight to prevent duplicate requests
   if (inflightRequests.has(epicKey)) {
     return;
@@ -827,10 +618,10 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     // Dynamically detect Jira base URL from current page
     const JIRA_BASE_URL = `${window.location.protocol}//${window.location.host}`;
     const jql = `"Epic Link" = ${epicKey} OR key = ${epicKey}`;
-    // Request sprint field along with assignee
-    // customfield_11002 is commonly used for sprints, but this may vary by Jira instance
+    // Request sprint and story points fields (auto-detected per domain)
     const maxResults = currentSettings.performance.apiMaxResults;
-    const url = `${JIRA_BASE_URL}/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=assignee,customfield_11002,customfield_10003,timeestimate,issuetype&maxResults=${maxResults}`;
+    const { sprintFieldId, storyPointsFieldId } = customFieldIds;
+    const url = `${JIRA_BASE_URL}/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=assignee,${sprintFieldId},${storyPointsFieldId},timeestimate,issuetype&maxResults=${maxResults}`;
 
     if (currentSettings.debug.logApiRequests) {
       console.log(`[Headcount] API request: ${epicKey}`);
@@ -860,10 +651,11 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
 
     // Separate the epic itself from its child stories
     let epicEstimate: { sp: number | null; pd: number | null } | undefined;
-    const issues = allIssues.filter((issue: { key: string; fields?: { issuetype?: { name?: string }; customfield_10003?: number | null; timeestimate?: number | null } }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const issues = allIssues.filter((issue: { key: string; id?: string; fields?: Record<string, any> }) => {
       if (issue.key === epicKey) {
         // Extract epic's own estimates for epic-level PW
-        const epicSp = issue.fields?.customfield_10003 as number | null;
+        const epicSp = issue.fields?.[storyPointsFieldId] as number | null;
         const epicTimeSec = issue.fields?.timeestimate as number | null;
         const epicPd = epicTimeSec ? epicTimeSec / 28800 : null;
         if ((epicSp && epicSp > 0) || (epicPd && epicPd > 0)) {
@@ -897,7 +689,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       const assignee = issue.fields?.assignee;
       const issueKey = issue.key;
       const storyIssueId = issue.id; // Numeric ID matching data-issue in DOM
-      const storyPoints = issue.fields?.customfield_10003 as number | null;
+      const storyPoints = issue.fields?.[storyPointsFieldId] as number | null;
       const timeEstimateSec = issue.fields?.timeestimate as number | null;
       const timeEstimateDays = timeEstimateSec ? timeEstimateSec / 28800 : null; // 8h = 28800s
 
@@ -916,7 +708,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       const userId = assignee?.accountId || assignee?.name || assignee?.key;
 
       // Parse sprint data: storySprints (all) for badge placement, currentSprints (ACTIVE/FUTURE) for remaining PW
-      const sprintData = issue.fields?.customfield_11002;
+      const sprintData = issue.fields?.[sprintFieldId];
       const storySprints: string[] = [];
       const currentSprints: string[] = [];
       if (sprintData && Array.isArray(sprintData)) {
@@ -1038,7 +830,15 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
       ));
     }
 
-    evictOldestCacheEntry();
+    {
+      const evictedKey = evictOldestCacheEntry(currentSettings.performance.maxCacheEntries);
+      if (evictedKey) {
+        statistics.cache.totalEntries--;
+        if (currentSettings.debug.enableDebugMode) {
+          console.log(`[Headcount] Evicted oldest cache entry: ${evictedKey}`);
+        }
+      }
+    }
     assigneeCountCache.set(epicKey, {
       totalCount: count,
       sprintCounts,
@@ -1060,7 +860,7 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     // Inject left panel badge (next to epic key)
     if (currentSettings.display.showLeftPanelBadges) {
       if (count > 0 || currentSettings.display.showZeroCountBadges) {
-        const pwOverride = buildPwOverride(assigneeCountCache.get(epicKey)!);
+        const pwOverride = buildPwOverride(assigneeCountCache.get(epicKey)!, getPwSettings());
         if (!injectBadge(epicRow, count, true, epicKey, pwOverride)) {
           updateBadge(epicRow, count, true, epicKey, pwOverride);
         }
@@ -1090,11 +890,20 @@ async function fetchAccurateCount(epicRow: HTMLElement, epicKey: string, issueId
     recordError('api', errorMessage);
 
     // Cache as 0 to avoid retry storm
-    evictOldestCacheEntry();
+    {
+      const evictedKey = evictOldestCacheEntry(currentSettings.performance.maxCacheEntries);
+      if (evictedKey) {
+        statistics.cache.totalEntries--;
+        if (currentSettings.debug.enableDebugMode) {
+          console.log(`[Headcount] Evicted oldest cache entry: ${evictedKey}`);
+        }
+      }
+    }
     assigneeCountCache.set(epicKey, {
       totalCount: 0,
       sprintCounts: new Map(),
       timestamp: Date.now(),
+      isError: true,
       sprintAssignees: new Map(),
       totalAssignees: [],
       effortPerPersonPerSprint: new Map(),
@@ -1335,6 +1144,40 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
           break;
         }
 
+        case 'REDETECT_INSTANCE_CONFIG': {
+          // Clear cached config for this domain and re-fetch from API
+          const hostname = location.hostname;
+          try {
+            const stored = await chrome.storage.local.get(['issueTypeAvatars', 'customFieldIds']);
+            const avatarCache = stored.issueTypeAvatars || {};
+            const fieldCache = stored.customFieldIds || {};
+            delete avatarCache[hostname];
+            delete fieldCache[hostname];
+            await chrome.storage.local.set({ issueTypeAvatars: avatarCache, customFieldIds: fieldCache });
+          } catch { /* ignore */ }
+
+          // Re-detect both in parallel
+          const [freshAvatars, freshFields] = await Promise.all([
+            getIssueTypeAvatars(),
+            getCustomFieldIds(),
+          ]);
+          issueTypeAvatars = freshAvatars;
+          customFieldIds = freshFields;
+
+          sendResponse({
+            type: 'REDETECT_INSTANCE_CONFIG_RESPONSE',
+            success: true,
+            epicAvatarId: freshAvatars.epicAvatarId,
+            storyAvatarId: freshAvatars.storyAvatarId,
+            sprintFieldId: freshFields.sprintFieldId,
+            storyPointsFieldId: freshFields.storyPointsFieldId,
+          } as PopupResponse);
+
+          // Re-process with new config
+          setTimeout(() => processEpics(), 100);
+          break;
+        }
+
         default:
           sendResponse({
             type: 'ERROR',
@@ -1396,8 +1239,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
  * Main initialization function
  */
 export async function initialize() {
+  injectBadgeStyles();
+
   // Load settings first
   await loadSettings();
+
+  // Auto-detect instance-specific configuration (avatar IDs and custom field IDs)
+  [issueTypeAvatars, customFieldIds] = await Promise.all([
+    getIssueTypeAvatars(),
+    getCustomFieldIds(),
+  ]);
 
   // Initial processing of epics on page load
   const result = processEpics();
@@ -1410,9 +1261,24 @@ export async function initialize() {
   const mutationObserver = setupObserver(currentSettings.performance.debounceDelayMs);
   // NOTE: ResizeObserver is set up lazily in processEpics() after first badges are injected
 
+  // Detect SPA navigation and clear stale caches
+  let lastUrl = location.href;
+  const urlObserver = new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      cache.clear();
+      clearAllBadges();
+      if (currentSettings.debug.enableDebugMode) {
+        console.log('[Headcount] SPA navigation detected, caches cleared');
+      }
+    }
+  });
+  urlObserver.observe(document.documentElement, { childList: true, subtree: true });
+
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
     mutationObserver.disconnect();
+    urlObserver.disconnect();
     if (resizeObserver) {
       resizeObserver.disconnect();
     }
@@ -1442,29 +1308,15 @@ if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
  * This allows tests to simulate cached data and test badge injection
  */
 export function __test_populateCache__(epicKey: string, totalCount: number, assignees: AssigneeInfo[] = []): void {
-  assigneeCountCache.set(epicKey, {
-    totalCount,
-    sprintCounts: new Map(),
-    timestamp: Date.now(),
-    sprintAssignees: new Map(),
-    totalAssignees: assignees,
-    effortPerPersonPerSprint: new Map(),
-    effortPerPersonCurrentSprints: new Map(),
-    estimatedStoryCount: 0,
-    totalStoryCount: 0,
-  });
-  statistics.cache.totalEntries = assigneeCountCache.size;
+  cache.populate(epicKey, totalCount, assignees);
+  statistics.cache.totalEntries = cache.assigneeCount.size;
 }
 
 /**
  * Test helper: Clear all caches for testing
  */
 export function __test_clearCache__(): void {
-  assigneeCountCache.clear();
-  inflightRequests.clear();
-  sprintLayoutCache.clear();
-  storyAssigneeCache.clear();
-  storyPwDetailCache.clear();
+  cache.clear();
   statistics.cache.totalEntries = 0;
   statistics.cache.hitCount = 0;
   statistics.cache.missCount = 0;

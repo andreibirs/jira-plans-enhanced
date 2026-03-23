@@ -31,14 +31,11 @@ describe('Badge UI', () => {
       expect(badge.title).toContain('No assignees');
     });
 
-    it('should apply correct styling', () => {
+    it('should apply CSS class for styling', () => {
       const badge = createBadge(3, true);
 
-      expect(badge.style.marginRight).toBe('8px');
-      expect(badge.style.padding).toBe('2px 6px');
-      expect(badge.style.backgroundColor).toBe('rgb(224, 224, 224)');
-      expect(badge.style.borderRadius).toBe('4px');
-      expect(badge.style.fontSize).toBe('11px');
+      expect(badge.classList.contains('jira-plans-headcount-badge')).toBe(true);
+      expect(badge.classList.contains('jpe-badge')).toBe(true);
     });
   });
 

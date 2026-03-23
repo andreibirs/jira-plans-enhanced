@@ -71,36 +71,34 @@ describe('DOM Parser', () => {
       expect(assignees.uniqueUsers).toEqual(['Alice Smith']);
     });
 
-    it('should extract unique assignees from multiple rows with same data-issue', () => {
+    it('should extract unique assignees from cells scoped to the epic issue ID', () => {
       document.body.innerHTML = `
         <!-- Epic row -->
         <div data-issue="18794394" data-name="scope-issue-18794394">
           <a class="_3HCO4" href="/browse/EPIC-123">EPIC-123</a>
         </div>
 
-        <!-- Story rows with same parent -->
-        <div data-issue="18794395" data-name="story-18794395"></div>
-        <div data-issue="18794396" data-name="story-18794396"></div>
-        <div data-issue="18794397" data-name="story-18794397"></div>
-
-        <!-- Assignee cells (separate column) -->
-        <div data-issue="18794395" data-name="cell-18794395" class="_26___">
+        <!-- Assignee cells matching the epic's data-issue -->
+        <div data-issue="18794394" data-name="cell-18794394-a" class="_26___">
           <span class="_2v7GN">Alice Smith</span>
         </div>
-        <div data-issue="18794396" data-name="cell-18794396" class="_26___">
+        <div data-issue="18794394" data-name="cell-18794394-b" class="_26___">
           <span class="_2v7GN">John Doe</span>
         </div>
-        <div data-issue="18794397" data-name="cell-18794397" class="_26___">
+        <div data-issue="18794394" data-name="cell-18794394-c" class="_26___">
           <span class="_2v7GN">Alice Smith</span>
+        </div>
+
+        <!-- Assignee cell for a DIFFERENT issue (should NOT be counted) -->
+        <div data-issue="99999" data-name="cell-99999" class="_26___">
+          <span class="_2v7GN">Other Person</span>
         </div>
       `;
 
-      // For now, we'll count all visible assignees (not just children of one epic)
-      // This is a simplified implementation - we'll refine hierarchy later
       const epicRow = document.querySelector('[data-issue="18794394"][data-name^="scope-issue-"]') as HTMLElement;
       const assignees = extractAssignees(epicRow);
 
-      expect(assignees.count).toBe(2); // Unique: Alice Smith, John Doe
+      expect(assignees.count).toBe(2); // Unique: Alice Smith, John Doe (not Other Person)
       expect(assignees.uniqueUsers).toEqual(['Alice Smith', 'John Doe']);
     });
 
@@ -159,15 +157,11 @@ describe('DOM Parser', () => {
           <div class="_1hfWN">[Canvas Edit] Logo Swap Feature</div>
         </div>
 
-        <!-- Child story rows -->
-        <div data-issue="18794395" data-name="story-18794395"></div>
-        <div data-issue="18794396" data-name="story-18794396"></div>
-
-        <!-- Assignee cells -->
-        <div data-issue="18794395" data-name="cell-18794395" class="_26___">
+        <!-- Assignee cells scoped to the epic's issue ID -->
+        <div data-issue="18794394" data-name="cell-18794394-a" class="_26___">
           <span class="_2v7GN">Alice Smith</span>
         </div>
-        <div data-issue="18794396" data-name="cell-18794396" class="_26___">
+        <div data-issue="18794394" data-name="cell-18794394-b" class="_26___">
           <span class="_2v7GN">John Doe</span>
         </div>
       `;

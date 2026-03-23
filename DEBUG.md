@@ -15,8 +15,8 @@ You should see logs like:
 [Service Worker] Initializing service worker...
 [Service Worker] Initialization complete
 [Service Worker] Updating icons for 5 existing tabs
-[Icon Update] Tab 123, Domain: jira.corp.adobe.com, Supported: false
-[Icon Update] Set gray icon for jira.corp.adobe.com
+[Icon Update] Tab 123, Domain: jira.example.com, Supported: false
+[Icon Update] Set gray icon for jira.example.com
 ```
 
 If you don't see any logs:
@@ -25,9 +25,9 @@ If you don't see any logs:
 
 When you switch tabs or load a page, you should see:
 ```
-[Tab Updated] TabId: 456, Status: complete, URL: https://jira.corp.adobe.com/...
-[Icon Update] Tab 456, Domain: jira.corp.adobe.com, Supported: false
-[Icon Update] Set gray icon for jira.corp.adobe.com
+[Tab Updated] TabId: 456, Status: complete, URL: https://jira.example.com/...
+[Icon Update] Tab 456, Domain: jira.example.com, Supported: false
+[Icon Update] Set gray icon for jira.example.com
 ```
 
 ## Check Icon Files
