@@ -580,8 +580,8 @@ export function injectStoryPwBadge(issueId: string, detail: { effort: number; ef
       ? `${detail.effort % 1 === 0 ? detail.effort : detail.effort.toFixed(1)}d`
       : `${detail.effort} SP`;
     const effortDesc = detail.effortUnit === 'pd' ? 'person-days' : 'story points';
-    badge.textContent = `${effortLabel} (${detail.personPw} PW)`;
-    badge.title = `${detail.effort} ${effortDesc} — assignee totals ${detail.personPw} person-week${detail.personPw === 1 ? '' : 's'}`;
+    badge.textContent = `${detail.personPw} PW`;
+    badge.title = `${detail.personPw} PW (${effortLabel} — ${detail.effort} ${effortDesc})`;
   }
 
   // Base styling via CSS classes; dynamic font-size/padding overrides below

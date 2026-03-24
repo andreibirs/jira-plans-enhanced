@@ -105,11 +105,15 @@ const CSS = `
 /* ---- Story PW badge: unestimated ---- */
 .${STYLES.storyPwUnestimated} {
   background-color: rgba(255, 152, 0, 0.85);
+  overflow: visible;
+  max-width: none;
 }
 
 /* ---- Story PW badge: estimated ---- */
 .${STYLES.storyPwEstimated} {
   background-color: rgba(100, 50, 150, 0.75);
+  overflow: visible;
+  max-width: none;
 }
 `;
 
