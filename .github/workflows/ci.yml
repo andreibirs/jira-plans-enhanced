@@ -15,32 +15,52 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if release tag exists for this commit
+        id: check_tag
+        run: |
+          if git tag --points-at HEAD | grep -q '^v'; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Release tag found — skipping CI (Release workflow handles validation)"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Node.js
+        if: steps.check_tag.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
+        if: steps.check_tag.outputs.skip != 'true'
         run: npm ci
 
       - name: Run linter
+        if: steps.check_tag.outputs.skip != 'true'
         run: npm run lint
 
       - name: Run tests
+        if: steps.check_tag.outputs.skip != 'true'
         run: npm test
 
       - name: Type check
+        if: steps.check_tag.outputs.skip != 'true'
         run: npx tsc --noEmit
 
       - name: Build extension
+        if: steps.check_tag.outputs.skip != 'true'
         run: npm run build
 
       - name: Validate manifest
+        if: steps.check_tag.outputs.skip != 'true'
         run: node -e "const m = require('./dist/manifest.json'); if (!m.manifest_version || !m.name || !m.version) throw new Error('Invalid manifest');"
 
       - name: Check bundle size
+        if: steps.check_tag.outputs.skip != 'true'
         run: |
           SIZE=$(du -sb dist | cut -f1)
           if [ $SIZE -gt 20971520 ]; then
@@ -49,6 +69,7 @@ jobs:
           fi
 
       - name: Upload build artifacts
+        if: steps.check_tag.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: extension-build
