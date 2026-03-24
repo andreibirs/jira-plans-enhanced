@@ -63,16 +63,15 @@ jobs:
           fi
           echo "Access token obtained"
 
-          # Check current item status
+          # Check current item status via v2 fetchStatus (has review state)
           STATUS_RESPONSE=$(curl -s \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "x-goog-api-version: 2" \
-            "https://www.googleapis.com/chromewebstore/v1.1/items/$EXTENSION_ID?projection=DRAFT")
-          UPLOAD_STATE=$(echo "$STATUS_RESPONSE" | jq -r '.uploadState // "UNKNOWN"')
-          echo "Current store status: $UPLOAD_STATE"
+            "https://chromewebstore.googleapis.com/v2/publishers/default/items/$EXTENSION_ID:fetchStatus")
+          SUBMITTED_STATE=$(echo "$STATUS_RESPONSE" | jq -r '.submittedItemRevisionStatus.state // "NONE"')
+          echo "Current submitted state: $SUBMITTED_STATE"
 
-          if [ "$UPLOAD_STATE" = "IN_REVIEW" ]; then
-            echo "Extension is IN_REVIEW — cancelling pending review..."
+          if [ "$SUBMITTED_STATE" = "PENDING_REVIEW" ]; then
+            echo "Extension is PENDING_REVIEW — cancelling pending submission..."
             CANCEL_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
               -H "Authorization: Bearer $ACCESS_TOKEN" \
               -H "Content-Length: 0" \
@@ -83,10 +82,11 @@ jobs:
             echo "Cancel response ($HTTP_STATUS):"
             echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
             if [ "$HTTP_STATUS" != "200" ]; then
-              echo "Failed to cancel review — try again after review completes"
+              echo "Failed to cancel submission — try again after review completes"
               exit 1
             fi
-            echo "Review cancelled"
+            echo "Submission cancelled, waiting for CWS to process..."
+            sleep 5
           fi
 
           # Upload
