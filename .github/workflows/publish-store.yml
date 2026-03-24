@@ -63,15 +63,9 @@ jobs:
           fi
           echo "Access token obtained"
 
-          # Check current item status via v2 fetchStatus (has review state)
-          STATUS_RESPONSE=$(curl -s \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://chromewebstore.googleapis.com/v2/publishers/default/items/$EXTENSION_ID:fetchStatus")
-          SUBMITTED_STATE=$(echo "$STATUS_RESPONSE" | jq -r '.submittedItemRevisionStatus.state // "NONE"')
-          echo "Current submitted state: $SUBMITTED_STATE"
-
-          if [ "$SUBMITTED_STATE" = "PENDING_REVIEW" ]; then
-            echo "Extension is PENDING_REVIEW — cancelling pending submission..."
+          # Helper: cancel pending submission via v2 API
+          cancel_submission() {
+            echo "Cancelling pending submission..."
             CANCEL_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
               -H "Authorization: Bearer $ACCESS_TOKEN" \
               -H "Content-Length: 0" \
@@ -82,27 +76,46 @@ jobs:
             echo "Cancel response ($HTTP_STATUS):"
             echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
             if [ "$HTTP_STATUS" != "200" ]; then
-              echo "Failed to cancel submission — try again after review completes"
-              exit 1
+              echo "Failed to cancel submission"
+              return 1
             fi
             echo "Submission cancelled, waiting for CWS to process..."
             sleep 5
+            return 0
+          }
+
+          # Helper: attempt upload
+          attempt_upload() {
+            echo "Uploading..."
+            UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "x-goog-api-version: 2" \
+              -X PUT \
+              -T jira-plans-enhanced.zip \
+              "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$EXTENSION_ID")
+            HTTP_STATUS=$(echo "$UPLOAD_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+            BODY=$(echo "$UPLOAD_RESPONSE" | sed '/HTTP_STATUS:/d')
+            echo "Upload response ($HTTP_STATUS):"
+            echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+            UPLOAD_STATE=$(echo "$BODY" | jq -r '.uploadState // "UNKNOWN"')
+          }
+
+          # Try upload — if blocked by pending review, cancel and retry
+          attempt_upload
+          if [ "$UPLOAD_STATE" != "SUCCESS" ]; then
+            ERROR_CODE=$(echo "$BODY" | jq -r '.itemError[0].error_code // ""')
+            if [ "$ERROR_CODE" = "ITEM_NOT_UPDATABLE" ]; then
+              echo "Upload blocked — item is in pending review or similar state"
+              if cancel_submission; then
+                echo "Retrying upload after cancel..."
+                attempt_upload
+              else
+                echo "Could not cancel — try again after review completes"
+                exit 1
+              fi
+            fi
           fi
 
-          # Upload
-          echo "Uploading..."
-          UPLOAD_RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "x-goog-api-version: 2" \
-            -X PUT \
-            -T jira-plans-enhanced.zip \
-            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$EXTENSION_ID")
-          HTTP_STATUS=$(echo "$UPLOAD_RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
-          BODY=$(echo "$UPLOAD_RESPONSE" | sed '/HTTP_STATUS:/d')
-          echo "Upload response ($HTTP_STATUS):"
-          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
-
-          UPLOAD_STATE=$(echo "$BODY" | jq -r '.uploadState // "UNKNOWN"')
           if [ "$UPLOAD_STATE" != "SUCCESS" ]; then
             echo "Upload failed with state: $UPLOAD_STATE"
             echo "$BODY" | jq -r '.itemError[]?.error_detail // empty' 2>/dev/null
